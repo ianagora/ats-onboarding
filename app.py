@@ -142,7 +142,12 @@ def get_openai_client():
     - pass api_key directly
     - explicitly build a bare httpx client with trust_env=False so it doesn't
       try to forward local proxy env vars that the SDK then treats as `proxies`
+    
+    Returns None if OPENAI_API_KEY is not configured or is a placeholder.
     """
+    # Check if API key is configured and not a placeholder
+    if not OPENAI_API_KEY or OPENAI_API_KEY.startswith("sk-your-") or OPENAI_API_KEY == "your_openai_api_key_here":
+        return None
 
     from openai import OpenAI
     import httpx
