@@ -378,6 +378,17 @@
               <option value="1" {{ 'selected' if has_cv else '' }}>Yes</option>
             </select>
           </div>
+          
+          <!-- Location Filter -->
+          <div class="col-6 col-md-2">
+            <label class="field-label">Location</label>
+            <select name="location" class="field-input form-select">
+              <option value="all" {{ 'selected' if location_filter == 'all' else '' }}>All Locations</option>
+              {% for loc in all_locations %}
+                <option value="{{ loc }}" {{ 'selected' if location_filter == loc else '' }}>{{ loc }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
           <!-- Last Updated -->
           <div class="col-6 col-md-2">

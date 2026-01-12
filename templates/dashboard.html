@@ -566,26 +566,52 @@
             </div>
         </div>
 
-        <!-- Applications -->
+        <!-- Active Engagements -->
+        <div class="kpi-card">
+            <div class="kpi-header">
+                <div class="kpi-icon">
+                    <i class="fas fa-handshake"></i>
+                </div>
+                <div class="kpi-info">
+                    <div class="kpi-label">Active Engagements</div>
+                    <div class="kpi-value">{{ total_active_engagements|default(0) }}</div>
+                </div>
+            </div>
+            <div class="kpi-stats">
+                <div class="kpi-chip">
+                    <i class="fas fa-briefcase"></i>
+                    Active Projects
+                </div>
+            </div>
+        </div>
+
+        <!-- New Applications by Engagement -->
         <div class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-file-alt"></i>
                 </div>
                 <div class="kpi-info">
-                    <div class="kpi-label">Applications<br><br></div>
-                    <div class="kpi-value">{{ total_apps }}</div>
+                    <div class="kpi-label">New Applications (7d)</div>
+                    <div class="kpi-value">
+                        {{ engagement_app_counts.values()|map(attribute='count')|sum|default(0) }}
+                    </div>
                 </div>
             </div>
             <div class="kpi-stats">
+                {% if engagement_app_counts %}
+                    {% for eng_data in engagement_app_counts.values()|list[:2] %}
+                    <div class="kpi-chip">
+                        <i class="fas fa-folder"></i>
+                        {{ eng_data.name }}: {{ eng_data.count }}
+                    </div>
+                    {% endfor %}
+                {% else %}
                 <div class="kpi-chip">
-                    <i class="fas fa-file-upload"></i>
-                    +{{ new_docs_7|default(0) }} CVs / 7d
+                    <i class="fas fa-folder"></i>
+                    No applications
                 </div>
-                <div class="kpi-chip">
-                    <i class="fas fa-file-invoice"></i>
-                    +{{ new_docs_30|default(0) }} / 30d
-                </div>
+                {% endif %}
             </div>
         </div>
 
