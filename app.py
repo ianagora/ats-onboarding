@@ -3173,14 +3173,14 @@ def engagements():
         "engagements.html",
         items=engagements_rows,
         opps=visible_opps,
-        # Filter values
-        status_filter=status_filter,
-        client_filter=client_filter,
-        sort_by=sort_by,
-        opp_status_filter=opp_status_filter,
-        opp_sort=opp_sort,
+        # Filter values (with defaults)
+        status_filter=status_filter or 'all',
+        client_filter=client_filter or 'all',
+        sort_by=sort_by or 'created_desc',
+        opp_status_filter=opp_status_filter or 'all',
+        opp_sort=opp_sort or 'created_desc',
         # Filter options
-        all_clients=all_clients,
+        all_clients=all_clients or [],
     )
 
 @app.route("/jobs", methods=["GET","POST"])
