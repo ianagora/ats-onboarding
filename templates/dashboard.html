@@ -54,6 +54,10 @@
         animation: fadeInUp 0.6s ease-out;
         position: relative;
         overflow: hidden;
+        cursor: pointer;
+        text-decoration: none;
+        color: inherit;
+        display: block;
     }
 
     .kpi-card::before {
@@ -544,7 +548,7 @@
     <!-- KPI Cards -->
     <div class="kpi-grid">
         <!-- Total Candidates -->
-        <div class="kpi-card">
+        <a href="{{ url_for('resource_pool') }}" class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-users"></i>
@@ -564,10 +568,10 @@
                     +{{ new_candidates_30|default(0) }} / 30d
                 </div>
             </div>
-        </div>
+        </a>
 
         <!-- Active Engagements -->
-        <div class="kpi-card">
+        <a href="{{ url_for('engagements') }}?status=active" class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-handshake"></i>
@@ -583,10 +587,10 @@
                     Active Projects
                 </div>
             </div>
-        </div>
+        </a>
 
         <!-- New Applications by Engagement -->
-        <div class="kpi-card">
+        <a href="{{ url_for('applications') }}" class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-file-alt"></i>
@@ -611,10 +615,10 @@
                 </div>
                 {% endif %}
             </div>
-        </div>
+        </a>
 
         <!-- Interviews -->
-        <div class="kpi-card">
+        <a href="{{ url_for('applications') }}" class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-calendar-check"></i>
@@ -630,10 +634,10 @@
                     {{ upcoming_interviews|length|default(0) }} This Week
                 </div>
             </div>
-        </div>
+        </a>
 
         <!-- Vetting In Progress -->
-        <div class="kpi-card">
+        <a href="{{ url_for('applications') }}" class="kpi-card">
             <div class="kpi-header">
                 <div class="kpi-icon">
                     <i class="fas fa-clipboard-check"></i>
@@ -651,7 +655,7 @@
                     Active Reviews
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 
     <!-- Upcoming Interviews -->
