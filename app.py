@@ -5107,6 +5107,15 @@ def resource_pool():
         shortlisted_any_ids = {
             cid for (cid,) in s.execute(select(Shortlist.candidate_id).distinct()).all()
         }
+        
+        # Check for candidates on active engagements (have signed contracts)
+        on_engagement_ids = {
+            cid for (cid,) in s.execute(
+                select(Application.candidate_id).distinct()
+                .join(ESigRequest, ESigRequest.application_id == Application.id)
+                .where(ESigRequest.status.in_(['signed', 'completed']))
+            ).all()
+        }
 
         rows = []
         # Heavy work cap
@@ -5148,6 +5157,7 @@ def resource_pool():
                 "score": score,                          # None if no job or not processed
                 "shortlisted": (cand.id in shortlisted_ids) if job else False,
                 "shortlisted_any": (cand.id in shortlisted_any_ids),
+                "on_engagement": (cand.id in on_engagement_ids),
             })
 
         # Pagination payload

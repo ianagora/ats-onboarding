@@ -513,7 +513,14 @@
                   </span>
                 </td>
 
-                <td><strong>{{ r.cand.name }}</strong></td>
+                <td>
+                  <strong>{{ r.cand.name }}</strong>
+                  {% if r.on_engagement %}
+                    <span class="badge bg-success ms-2" style="font-size: 0.7rem;">
+                      <i class="fas fa-briefcase"></i> On Engagement
+                    </span>
+                  {% endif %}
+                </td>
 
                 <td style="white-space: normal;">
                   {{ r.cand.skills or '—' }}
