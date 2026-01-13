@@ -453,14 +453,19 @@
           <a class="btn-modern btn-modern-outline" href="{{ url_for('resource_pool') }}">
             <i class="fas fa-undo"></i> Reset
           </a>
+          <a class="btn-modern btn-modern-outline"
+             href="{{ url_for('resource_pool_csv') }}">
+            <i class="fas fa-download"></i> Export All
+          </a>
           <a class="btn-modern btn-modern-success"
              href="{{ url_for('resource_pool_csv',
                               q=q,
                               has_cv=('1' if has_cv else '0'),
                               job_id=(job.id if job else None),
                               last_updated=last_updated,
+                              location=location_filter,
                               exclude_shortlisted=request.args.get('exclude_shortlisted','0')) }}">
-            <i class="fas fa-download"></i> Export CSV
+            <i class="fas fa-filter"></i> Export Filtered
           </a>
         </div>
       </form>
