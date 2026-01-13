@@ -397,8 +397,8 @@
             <label class="field-label">Role</label>
             <select name="role_type[]" class="field-input role-field">
               {% for rt in role_types %}
-                <option value="{{ rt.name }}" {% if rt.name == row.role_type %}selected{% endif %}>
-                  {{ rt.name }}
+                <option value="{{ rt.tag }}" {% if rt.tag == row.role_type %}selected{% endif %}>
+                  {{ rt.tag }}
                 </option>
               {% endfor %}
             </select>
@@ -470,7 +470,7 @@
             <select name="role_type[]" class="field-input role-field">
               <option value="">— select role —</option>
               {% for rt in role_types %}
-                <option value="{{ rt.name }}">{{ rt.name }}</option>
+                <option value="{{ rt.tag }}">{{ rt.tag }}</option>
               {% endfor %}
             </select>
           </div>

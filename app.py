@@ -4674,15 +4674,25 @@ def engagement_plan(eng_id):
             .order_by(EngagementPlan.id.asc())
         ).all()
 
-        # Get roles from TaxonomyCategory (not RoleType)
-        role_types = s.scalars(
+        # Get role categories
+        role_categories = s.scalars(
             select(TaxonomyCategory)
             .where(TaxonomyCategory.type == 'role')
             .order_by(TaxonomyCategory.name.asc())
         ).all()
+        
+        # Get all tags for role categories
+        role_types = []
+        for cat in role_categories:
+            tags = s.scalars(
+                select(TaxonomyTag)
+                .where(TaxonomyTag.category_id == cat.id)
+                .order_by(TaxonomyTag.tag.asc())
+            ).all()
+            role_types.extend(tags)
 
     return render_template(
-        "engagement_plan.html",   # <- this should be the template I provided
+        "engagement_plan.html",
         engagement=engagement,
         rows=rows,
         role_types=role_types,
