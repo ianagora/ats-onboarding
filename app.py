@@ -3899,6 +3899,21 @@ def action_complete_interview(app_id):
     flash("Interview marked as completed.", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@app.route("/action/skip_interview/<int:app_id>", methods=["POST"])
+def action_skip_interview(app_id):
+    """Skip interview and mark as completed without scheduling"""
+    with Session(engine) as s:
+        appn = s.scalar(select(Application).where(Application.id == app_id))
+        if not appn:
+            abort(404)
+        # Mark interview as completed without scheduling
+        appn.interview_completed_at = datetime.datetime.utcnow()
+        appn.interview_notes = (appn.interview_notes or "") + "\n[Interview skipped]"
+        appn.status = "Interview Completed"
+        s.commit()
+    flash("Interview skipped. Application moved to next stage.", "success")
+    return redirect(url_for("application_detail", app_id=app_id))
+
 @app.route("/action/save_interview_notes/<int:app_id>", methods=["POST"])
 def action_save_interview_notes(app_id):
     notes = request.form.get("interview_notes", "").strip()

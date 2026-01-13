@@ -592,6 +592,15 @@
             </div>
           </div>
         </form>
+        
+        {% if not appn.interview_completed_at %}
+        <form method="POST" action="{{ url_for('action_skip_interview', app_id=appn.id) }}" class="mb-3">
+          <button class="btn btn-modern btn-modern-outline btn-modern-sm" type="submit" 
+                  onclick="return confirm('Skip interview and move to next stage?')">
+            <i class="fas fa-forward me-2"></i>Skip Interview
+          </button>
+        </form>
+        {% endif %}
 
         <!-- Current Status -->
         <div class="interview-status {% if appn.interview_completed_at %}interview-status-completed{% endif %}">
