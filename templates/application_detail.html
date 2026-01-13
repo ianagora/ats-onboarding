@@ -641,6 +641,24 @@
             <i class="fas fa-save me-2"></i>Save Notes
           </button>
         </form>
+        
+        <hr class="my-3">
+        
+        <!-- Assessor Notes -->
+        <h6 class="section-subtitle">Assessor Notes</h6>
+        <form method="POST" action="{{ url_for('action_save_assessor_notes', app_id=appn.id) }}">
+          <div class="mb-3">
+            <textarea
+              class="form-control field-input"
+              name="assessor_notes"
+              rows="4"
+              placeholder="Additional assessor comments…"
+            >{{ appn.cover_note or '' }}</textarea>
+          </div>
+          <button class="btn btn-modern btn-modern-outline btn-modern-sm">
+            <i class="fas fa-save me-2"></i>Save Assessor Notes
+          </button>
+        </form>
       </div>
       {% endif %}
 

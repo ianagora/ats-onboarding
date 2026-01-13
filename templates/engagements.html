@@ -383,7 +383,14 @@
       <div class="row g-3 mb-4">
         <div class="col-md-3">
           <label class="form-label small text-muted fw-bold">Name</label>
-          <input type="text" class="form-control form-control-sm" id="nameFilter" value="{{ name_filter if name_filter is defined else '' }}" placeholder="Search by name..." onkeypress="if(event.key==='Enter') applyFilters()">
+          <select class="form-select form-select-sm" id="nameFilter" onchange="applyFilters()">
+            <option value="" {{ 'selected' if not name_filter else '' }}>All Engagements</option>
+            {% if all_engagement_names is defined %}
+              {% for name in all_engagement_names %}
+                <option value="{{ name }}" {{ 'selected' if name_filter == name else '' }}>{{ name }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
         </div>
         <div class="col-md-2">
           <label class="form-label small text-muted fw-bold">Status</label>
@@ -548,7 +555,14 @@
       <div class="row g-3 mb-4">
         <div class="col-md-3">
           <label class="form-label small text-muted fw-bold">Opportunity</label>
-          <input type="text" class="form-control form-control-sm" id="oppNameFilter" value="{{ opp_name_filter if opp_name_filter is defined else '' }}" placeholder="Search..." onkeypress="if(event.key==='Enter') applyOppFilters()">
+          <select class="form-select form-select-sm" id="oppNameFilter" onchange="applyOppFilters()">
+            <option value="" {{ 'selected' if not opp_name_filter else '' }}>All Opportunities</option>
+            {% if all_opportunity_names is defined %}
+              {% for name in all_opportunity_names %}
+                <option value="{{ name }}" {{ 'selected' if opp_name_filter == name else '' }}>{{ name }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
         </div>
         <div class="col-md-2">
           <label class="form-label small text-muted fw-bold">Client</label>

@@ -3082,9 +3082,9 @@ def engagements():
         # 1. Current engagements with filters
         eng_query = select(Engagement)
         
-        # Apply name filter (search)
+        # Apply name filter (exact match from dropdown)
         if name_filter:
-            eng_query = eng_query.where(Engagement.name.ilike(f'%{name_filter}%'))
+            eng_query = eng_query.where(Engagement.name == name_filter)
         
         # Apply status filter
         if status_filter == 'active':
@@ -3109,6 +3109,20 @@ def engagements():
             eng_query = eng_query.order_by(Engagement.id.desc())
         
         engagements_rows = s.scalars(eng_query).all()
+        
+        # Get unique engagement names for filter dropdown
+        all_engagement_names = []
+        try:
+            all_engagement_names = s.scalars(
+                select(Engagement.name)
+                .distinct()
+                .where(Engagement.name.isnot(None))
+                .where(Engagement.name != '')
+                .order_by(Engagement.name)
+            ).all()
+        except Exception as e:
+            print(f"Error getting engagement names: {e}")
+            all_engagement_names = []
         
         # Get unique clients for filter dropdown
         all_clients = []
@@ -3137,13 +3151,27 @@ def engagements():
         except Exception as e:
             print(f"Error getting opportunity clients: {e}")
             all_opp_clients = []
+        
+        # Get unique opportunity names for filter dropdown
+        all_opportunity_names = []
+        try:
+            all_opportunity_names = s.scalars(
+                select(Opportunity.name)
+                .distinct()
+                .where(Opportunity.name.isnot(None))
+                .where(Opportunity.name != '')
+                .order_by(Opportunity.name)
+            ).all()
+        except Exception as e:
+            print(f"Error getting opportunity names: {e}")
+            all_opportunity_names = []
 
         # 2. All opportunities with filters
         opp_query = select(Opportunity)
         
-        # Apply opportunity name filter (search)
+        # Apply opportunity name filter (exact match from dropdown)
         if opp_name_filter:
-            opp_query = opp_query.where(Opportunity.name.ilike(f'%{opp_name_filter}%'))
+            opp_query = opp_query.where(Opportunity.name == opp_name_filter)
         
         # Apply opportunity client filter
         if opp_client_filter and opp_client_filter != 'all':
@@ -3229,6 +3257,8 @@ def engagements():
         opp_sort=opp_sort,
         all_clients=all_clients,
         all_opp_clients=all_opp_clients,
+        all_engagement_names=all_engagement_names,
+        all_opportunity_names=all_opportunity_names,
     )
 
 @app.route("/jobs", methods=["GET","POST"])
@@ -3924,6 +3954,18 @@ def action_save_interview_notes(app_id):
         appn.interview_notes = notes
         s.commit()
     flash("Interview notes saved.", "success")
+    return redirect(url_for("application_detail", app_id=app_id))
+
+@app.route("/action/save_assessor_notes/<int:app_id>", methods=["POST"])
+def action_save_assessor_notes(app_id):
+    notes = request.form.get("assessor_notes", "").strip()
+    with Session(engine) as s:
+        appn = s.scalar(select(Application).where(Application.id == app_id))
+        if not appn:
+            abort(404)
+        appn.cover_note = notes
+        s.commit()
+    flash("Assessor notes saved.", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
 # -------- E-signature: send & poll --------
@@ -4643,8 +4685,11 @@ def engagement_plan(eng_id):
             .order_by(EngagementPlan.id.asc())
         ).all()
 
+        # Get roles from TaxonomyCategory (not RoleType)
         role_types = s.scalars(
-            select(RoleType).order_by(RoleType.name.asc())
+            select(TaxonomyCategory)
+            .where(TaxonomyCategory.type == 'role')
+            .order_by(TaxonomyCategory.name.asc())
         ).all()
 
     return render_template(
