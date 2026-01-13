@@ -2,6 +2,12 @@ import os, uuid, datetime, json, mimetypes, re, smtplib, ssl, base64, hashlib, h
 from email.message import EmailMessage
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, abort
 from flask_wtf import FlaskForm
+from flask_wtf.csrf import CSRFProtect
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 from flask import Response
 from wtforms import StringField, TextAreaField, BooleanField, SelectField, IntegerField, FileField, DateTimeLocalField, SubmitField
 from typing import Optional, List, Dict, Tuple
@@ -187,6 +193,27 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Security headers
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Content-Security-Policy'] = "default-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net"
+    return response
+
 # Health check endpoint for Railway
 @app.route("/health")
 def health():
@@ -204,6 +231,86 @@ def inject_template_helpers():
 # --- Auth / sessions ---
 login_manager = LoginManager(app)
 login_manager.login_view = "login"  # default guard for worker-only pages
+
+@login_manager.user_loader
+def load_user(user_id):
+    with Session(engine) as s:
+        user = s.get(User, int(user_id))
+        if user:
+            s.expunge(user)
+            return user
+    return None
+
+# ========== Authentication Routes ==========
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Staff login page"""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        
+        with Session(engine) as s:
+            user = s.scalar(select(User).where(User.email == email))
+            if user and check_password_hash(user.password_hash, password):
+                # Successful login
+                s.expunge(user)
+                login_user(user, remember=True)
+                
+                next_page = request.args.get('next')
+                if next_page and next_page.startswith('/'):
+                    return redirect(next_page)
+                return redirect(url_for('index'))
+            else:
+                flash("Invalid email or password", "error")
+    
+    return render_template("login.html")
+
+@app.route("/logout")
+@login_required
+def logout():
+    """Staff logout"""
+    logout_user()
+    flash("You have been logged out", "info")
+    return redirect(url_for('login'))
+
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    """Allow users to change their password"""
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        
+        if not current_password or not new_password or not confirm_password:
+            flash("All fields are required", "error")
+            return render_template("change_password.html")
+        
+        if new_password != confirm_password:
+            flash("New passwords do not match", "error")
+            return render_template("change_password.html")
+        
+        if len(new_password) < 8:
+            flash("Password must be at least 8 characters", "error")
+            return render_template("change_password.html")
+        
+        with Session(engine) as s:
+            user = s.get(User, current_user.id)
+            if not user or not check_password_hash(user.password_hash, current_password):
+                flash("Current password is incorrect", "error")
+                return render_template("change_password.html")
+            
+            # Update password
+            user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
+            s.commit()
+            flash("Password changed successfully", "success")
+            return redirect(url_for('index'))
+    
+    return render_template("change_password.html")
 
 def _signer() -> URLSafeTimedSerializer:
     # used for candidate magic links
@@ -227,6 +334,31 @@ def get_role_category_names(session: Session) -> List[str]:
 from sqlalchemy import String, Integer, DateTime, Boolean
 
 # --- Taxonomy models (subject groups/tags) ---
+# --- User model for authentication ---
+class User(Base, UserMixin):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(200), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(200), nullable=False)
+    role = Column(String(50), default="employee")  # employee, admin, super_admin
+    is_active = Column(Boolean, default=True)
+    last_login = Column(DateTime, nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
+    def is_locked(self):
+        if self.locked_until and self.locked_until > datetime.datetime.utcnow():
+            return True
+        return False
+
 class CandidateTag(Base):
     __tablename__ = "candidate_tags"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -977,6 +1109,44 @@ def ensure_schema():
                     )
         except Exception:
             pass
+
+        # ===== Seed admin user if no users exist =====
+        try:
+            user_count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+            if user_count == 0:
+                from werkzeug.security import generate_password_hash
+                import secrets
+                
+                # Generate a secure default password
+                default_password = secrets.token_urlsafe(16)
+                password_hash_value = generate_password_hash(default_password, method='pbkdf2:sha256')
+                
+                # Create admin user
+                conn.execute(
+                    text("""
+                        INSERT INTO users (name, email, password_hash, role, is_active, created_at)
+                        VALUES (:name, :email, :password_hash, :role, :is_active, CURRENT_TIMESTAMP)
+                    """),
+                    {
+                        "name": "Admin",
+                        "email": "admin@example.com",
+                        "password_hash": password_hash_value,
+                        "role": "super_admin",
+                        "is_active": 1
+                    }
+                )
+                
+                # Log the credentials (WARNING: In production, send this via secure channel)
+                print("\n" + "="*80)
+                print("🔐 ADMIN USER CREATED")
+                print("="*80)
+                print(f"Email: admin@example.com")
+                print(f"Password: {default_password}")
+                print("="*80)
+                print("⚠️  IMPORTANT: Change this password immediately after first login!")
+                print("="*80 + "\n")
+        except Exception as e:
+            print(f"Warning: Could not seed admin user: {e}")
 
 # Run on import
 ensure_schema()
@@ -1942,6 +2112,7 @@ def slugify_role(name: str) -> str:
 from sqlalchemy.orm import selectinload  # make sure this import exists
 
 @app.route("/")
+@login_required
 def index():
     now = datetime.datetime.utcnow()
     d7  = now - datetime.timedelta(days=7)
