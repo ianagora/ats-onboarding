@@ -3125,9 +3125,9 @@ def engagements():
         if opp_sort == 'created_asc':
             opp_query = opp_query.order_by(Opportunity.created_at.asc())
         elif opp_sort == 'value_desc':
-            opp_query = opp_query.order_by(Opportunity.estimated_value.desc().nullslast())
+            opp_query = opp_query.order_by(Opportunity.est_value.desc().nullslast())
         elif opp_sort == 'value_asc':
-            opp_query = opp_query.order_by(Opportunity.estimated_value.asc().nullslast())
+            opp_query = opp_query.order_by(Opportunity.est_value.asc().nullslast())
         elif opp_sort == 'name_asc':
             opp_query = opp_query.order_by(Opportunity.name.asc())
         else:  # created_desc (default)
