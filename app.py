@@ -3062,16 +3062,89 @@ def create_engagement():
 
 @app.route("/engagements", methods=["GET"])
 def engagements():
+    # Get filter parameters with safe defaults
+    status_filter = request.args.get('status', 'all')
+    client_filter = request.args.get('client', 'all')
+    sort_by = request.args.get('sort', 'created_desc')
+    opp_status_filter = request.args.get('opp_status', 'all')
+    opp_sort = request.args.get('opp_sort', 'created_desc')
+    
     with Session(engine) as s:
-        # 1. Current engagements (for "Current Engagements" table)
-        engagements_rows = s.scalars(
-            select(Engagement).order_by(Engagement.id.desc())
-        ).all()
+        # 1. Current engagements with filters
+        eng_query = select(Engagement)
+        
+        # Apply status filter
+        if status_filter == 'active':
+            eng_query = eng_query.where(Engagement.status == "Active")
+        elif status_filter == 'inactive':
+            eng_query = eng_query.where(Engagement.status != "Active")
+        
+        # Apply client filter
+        if client_filter and client_filter != 'all':
+            eng_query = eng_query.where(Engagement.client == client_filter)
+        
+        # Apply sorting
+        if sort_by == 'created_asc':
+            eng_query = eng_query.order_by(Engagement.id.asc())
+        elif sort_by == 'name_asc':
+            eng_query = eng_query.order_by(Engagement.name.asc())
+        elif sort_by == 'name_desc':
+            eng_query = eng_query.order_by(Engagement.name.desc())
+        elif sort_by == 'start_date':
+            eng_query = eng_query.order_by(Engagement.start_date.desc().nullslast())
+        else:  # created_desc (default)
+            eng_query = eng_query.order_by(Engagement.id.desc())
+        
+        engagements_rows = s.scalars(eng_query).all()
+        
+        # Get unique clients for filter dropdown
+        all_clients = []
+        try:
+            all_clients = s.scalars(
+                select(Engagement.client)
+                .distinct()
+                .where(Engagement.client.isnot(None))
+                .where(Engagement.client != '')
+                .order_by(Engagement.client)
+            ).all()
+        except Exception as e:
+            print(f"Error getting clients: {e}")
+            all_clients = []
 
-        # 2. All opportunities, newest first
-        opp_rows = s.scalars(
-            select(Opportunity).order_by(Opportunity.created_at.desc())
-        ).all()
+        # 2. All opportunities with filters
+        opp_query = select(Opportunity)
+        
+        # Apply opportunity status filter
+        if opp_status_filter and opp_status_filter != 'all':
+            try:
+                if opp_status_filter == 'proposal':
+                    opp_query = opp_query.where(Opportunity.stage.ilike('%proposal%'))
+                elif opp_status_filter == 'negotiation':
+                    opp_query = opp_query.where(Opportunity.stage.ilike('%negotiation%'))
+                elif opp_status_filter == 'closed_won':
+                    opp_query = opp_query.where(Opportunity.stage.ilike('closed won'))
+                elif opp_status_filter == 'closed_lost':
+                    opp_query = opp_query.where(Opportunity.stage.ilike('closed lost'))
+            except Exception as e:
+                print(f"Error filtering opportunities: {e}")
+        
+        # Apply opportunity sorting
+        try:
+            if opp_sort == 'created_asc':
+                opp_query = opp_query.order_by(Opportunity.created_at.asc())
+            elif opp_sort == 'value_desc':
+                opp_query = opp_query.order_by(Opportunity.est_value.desc().nullslast())
+            elif opp_sort == 'value_asc':
+                opp_query = opp_query.order_by(Opportunity.est_value.asc().nullslast())
+            elif opp_sort == 'name_asc':
+                opp_query = opp_query.order_by(Opportunity.name.asc())
+            else:  # created_desc (default)
+                opp_query = opp_query.order_by(Opportunity.created_at.desc())
+        except Exception as e:
+            print(f"Error sorting opportunities: {e}")
+            opp_query = opp_query.order_by(Opportunity.created_at.desc())
+        
+        opp_rows = s.scalars(opp_query).all()
 
         # 3. Map opportunity.id -> (engagement_id, engagement_ref)
         eng_links = {
@@ -3111,6 +3184,12 @@ def engagements():
         "engagements.html",
         items=engagements_rows,
         opps=visible_opps,
+        status_filter=status_filter,
+        client_filter=client_filter,
+        sort_by=sort_by,
+        opp_status_filter=opp_status_filter,
+        opp_sort=opp_sort,
+        all_clients=all_clients,
     )
 
 @app.route("/jobs", methods=["GET","POST"])
