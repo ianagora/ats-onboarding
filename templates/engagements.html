@@ -367,58 +367,57 @@
   {# =========================
      Active Engagements table
      ========================= #}
-  {% if items or (status_filter is defined and status_filter != 'all') or (client_filter is defined and client_filter != 'all') %}
-    <div class="modern-card mb-4 fade-in-up stagger-2">
-      <div class="card-body p-4">
-        <div class="section-header">
-          <div>
-            <div class="section-title">
-              <i class="fas fa-briefcase"></i>
-              Current Engagements
-            </div>
-            <div class="section-subtitle">Live delivery work in progress</div>
+  <div class="modern-card mb-4 fade-in-up stagger-2">
+    <div class="card-body p-4">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <i class="fas fa-briefcase"></i>
+            Current Engagements
           </div>
+          <div class="section-subtitle">Live delivery work in progress</div>
         </div>
-        
-        <!-- Filters and Sorting -->
-        <div class="row g-3 mb-4">
-          <div class="col-md-3">
-            <label class="form-label small text-muted fw-bold">Status</label>
-            <select class="form-select form-select-sm" id="statusFilter" onchange="applyFilters()">
-              <option value="all" {{ 'selected' if (status_filter is defined and status_filter == 'all') or status_filter is not defined else '' }}>All Statuses</option>
-              <option value="active" {{ 'selected' if status_filter is defined and status_filter == 'active' else '' }}>Active Only</option>
-              <option value="inactive" {{ 'selected' if status_filter is defined and status_filter == 'inactive' else '' }}>Inactive Only</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label small text-muted fw-bold">Client</label>
-            <select class="form-select form-select-sm" id="clientFilter" onchange="applyFilters()">
-              <option value="all" {{ 'selected' if (client_filter is defined and client_filter == 'all') or client_filter is not defined else '' }}>All Clients</option>
-              {% if all_clients is defined and all_clients %}
-                {% for client in all_clients %}
-                <option value="{{ client }}" {{ 'selected' if client_filter is defined and client_filter == client else '' }}>{{ client }}</option>
-                {% endfor %}
-              {% endif %}
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label small text-muted fw-bold">Sort By</label>
-            <select class="form-select form-select-sm" id="sortBy" onchange="applyFilters()">
-              <option value="created_desc" {{ 'selected' if (sort_by is defined and sort_by == 'created_desc') or sort_by is not defined else '' }}>Newest First</option>
-              <option value="created_asc" {{ 'selected' if sort_by is defined and sort_by == 'created_asc' else '' }}>Oldest First</option>
-              <option value="name_asc" {{ 'selected' if sort_by is defined and sort_by == 'name_asc' else '' }}>Name A-Z</option>
-              <option value="name_desc" {{ 'selected' if sort_by is defined and sort_by == 'name_desc' else '' }}>Name Z-A</option>
-              <option value="start_date" {{ 'selected' if sort_by is defined and sort_by == 'start_date' else '' }}>Start Date</option>
-            </select>
-          </div>
-          <div class="col-md-3 d-flex align-items-end">
-            <button class="btn btn-modern-outline w-100" onclick="resetFilters()">
-              <i class="fas fa-redo"></i> Reset Filters
-            </button>
-          </div>
+      </div>
+      
+      <!-- Filters and Sorting -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <label class="form-label small text-muted fw-bold">Status</label>
+          <select class="form-select form-select-sm" id="statusFilter" onchange="applyFilters()">
+            <option value="all" {{ 'selected' if (status_filter is defined and status_filter == 'all') or status_filter is not defined else '' }}>All Statuses</option>
+            <option value="active" {{ 'selected' if status_filter is defined and status_filter == 'active' else '' }}>Active Only</option>
+            <option value="inactive" {{ 'selected' if status_filter is defined and status_filter == 'inactive' else '' }}>Inactive Only</option>
+          </select>
         </div>
+        <div class="col-md-3">
+          <label class="form-label small text-muted fw-bold">Client</label>
+          <select class="form-select form-select-sm" id="clientFilter" onchange="applyFilters()">
+            <option value="all" {{ 'selected' if (client_filter is defined and client_filter == 'all') or client_filter is not defined else '' }}>All Clients</option>
+            {% if all_clients is defined and all_clients %}
+              {% for client in all_clients %}
+              <option value="{{ client }}" {{ 'selected' if client_filter is defined and client_filter == client else '' }}>{{ client }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small text-muted fw-bold">Sort By</label>
+          <select class="form-select form-select-sm" id="sortBy" onchange="applyFilters()">
+            <option value="created_desc" {{ 'selected' if (sort_by is defined and sort_by == 'created_desc') or sort_by is not defined else '' }}>Newest First</option>
+            <option value="created_asc" {{ 'selected' if sort_by is defined and sort_by == 'created_asc' else '' }}>Oldest First</option>
+            <option value="name_asc" {{ 'selected' if sort_by is defined and sort_by == 'name_asc' else '' }}>Name A-Z</option>
+            <option value="name_desc" {{ 'selected' if sort_by is defined and sort_by == 'name_desc' else '' }}>Name Z-A</option>
+            <option value="start_date" {{ 'selected' if sort_by is defined and sort_by == 'start_date' else '' }}>Start Date</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <button class="btn btn-modern-outline w-100" onclick="resetFilters()">
+            <i class="fas fa-redo"></i> Reset Filters
+          </button>
+        </div>
+      </div>
 
-        {% if items %}
+      {% if items %}
 
         <div class="table-responsive">
           <table class="table modern-table mb-0">
