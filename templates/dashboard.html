@@ -593,14 +593,12 @@
                 </div>
                 <div class="kpi-info">
                     <div class="kpi-label">New Applications (7d)</div>
-                    <div class="kpi-value">
-                        {{ engagement_app_counts.values()|map(attribute='count')|sum|default(0) }}
-                    </div>
+                    <div class="kpi-value">{{ total_new_apps_7d|default(0) }}</div>
                 </div>
             </div>
             <div class="kpi-stats">
-                {% if engagement_app_counts %}
-                    {% for eng_data in engagement_app_counts.values()|list[:2] %}
+                {% if top_engagements %}
+                    {% for eng_data in top_engagements %}
                     <div class="kpi-chip">
                         <i class="fas fa-folder"></i>
                         {{ eng_data.name }}: {{ eng_data.count }}

@@ -1968,6 +1968,7 @@ def index():
         
         # Count new applications by active engagement (last 7 days)
         engagement_app_counts = {}
+        total_new_apps_7d = 0
         for eng in active_engagements:
             new_apps_count = s.scalar(
                 select(func.count(Application.id))
@@ -1981,6 +1982,14 @@ def index():
                 'client': eng.client,
                 'count': new_apps_count
             }
+            total_new_apps_7d += new_apps_count
+        
+        # Get top 2 engagements by application count for display
+        top_engagements = sorted(
+            engagement_app_counts.values(),
+            key=lambda x: x['count'],
+            reverse=True
+        )[:2]
 
         # Eager-load engagement so templates can safely access j.engagement.name
         recent_jobs = s.scalars(
@@ -2086,7 +2095,8 @@ def index():
         stuck_apps=stuck_apps,
         engagement_progress=engagement_progress,
         total_active_engagements=total_active_engagements,
-        engagement_app_counts=engagement_app_counts,
+        total_new_apps_7d=total_new_apps_7d,
+        top_engagements=top_engagements,
     )
 
 @app.route("/action/candidate/regenerate_summary", methods=["POST"])
