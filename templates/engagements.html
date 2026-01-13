@@ -382,6 +382,10 @@
       <!-- Filters and Sorting -->
       <div class="row g-3 mb-4">
         <div class="col-md-3">
+          <label class="form-label small text-muted fw-bold">Name</label>
+          <input type="text" class="form-control form-control-sm" id="nameFilter" value="{{ name_filter if name_filter is defined else '' }}" placeholder="Search by name..." onkeypress="if(event.key==='Enter') applyFilters()">
+        </div>
+        <div class="col-md-2">
           <label class="form-label small text-muted fw-bold">Status</label>
           <select class="form-select form-select-sm" id="statusFilter" onchange="applyFilters()">
             <option value="all" {{ 'selected' if (status_filter is defined and status_filter == 'all') or status_filter is not defined else '' }}>All Statuses</option>
@@ -389,7 +393,7 @@
             <option value="inactive" {{ 'selected' if status_filter is defined and status_filter == 'inactive' else '' }}>Inactive Only</option>
           </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label class="form-label small text-muted fw-bold">Client</label>
           <select class="form-select form-select-sm" id="clientFilter" onchange="applyFilters()">
             <option value="all" {{ 'selected' if (client_filter is defined and client_filter == 'all') or client_filter is not defined else '' }}>All Clients</option>
@@ -410,9 +414,9 @@
             <option value="start_date" {{ 'selected' if sort_by is defined and sort_by == 'start_date' else '' }}>Start Date</option>
           </select>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
+        <div class="col-md-2 d-flex align-items-end">
           <button class="btn btn-modern-outline w-100" onclick="resetFilters()">
-            <i class="fas fa-redo"></i> Reset Filters
+            <i class="fas fa-redo"></i> Reset
           </button>
         </div>
       </div>
@@ -542,7 +546,22 @@
       
       <!-- Opportunities Filters and Sorting -->
       <div class="row g-3 mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <label class="form-label small text-muted fw-bold">Opportunity</label>
+          <input type="text" class="form-control form-control-sm" id="oppNameFilter" value="{{ opp_name_filter if opp_name_filter is defined else '' }}" placeholder="Search..." onkeypress="if(event.key==='Enter') applyOppFilters()">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small text-muted fw-bold">Client</label>
+          <select class="form-select form-select-sm" id="oppClientFilter" onchange="applyOppFilters()">
+            <option value="all" {{ 'selected' if (opp_client_filter is defined and opp_client_filter == 'all') or opp_client_filter is not defined else '' }}>All Clients</option>
+            {% if all_opp_clients is defined and all_opp_clients %}
+              {% for client in all_opp_clients %}
+              <option value="{{ client }}" {{ 'selected' if opp_client_filter is defined and opp_client_filter == client else '' }}>{{ client }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-2">
           <label class="form-label small text-muted fw-bold">Stage</label>
           <select class="form-select form-select-sm" id="oppStatusFilter" onchange="applyOppFilters()">
             <option value="all" {{ 'selected' if (opp_status_filter is defined and opp_status_filter == 'all') or opp_status_filter is not defined else '' }}>All Stages</option>
@@ -552,7 +571,7 @@
             <option value="closed_lost" {{ 'selected' if opp_status_filter is defined and opp_status_filter == 'closed_lost' else '' }}>Closed Lost</option>
           </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label small text-muted fw-bold">Sort By</label>
           <select class="form-select form-select-sm" id="oppSort" onchange="applyOppFilters()">
             <option value="created_desc" {{ 'selected' if (opp_sort is defined and opp_sort == 'created_desc') or opp_sort is not defined else '' }}>Newest First</option>
@@ -562,9 +581,9 @@
             <option value="name_asc" {{ 'selected' if opp_sort is defined and opp_sort == 'name_asc' else '' }}>Name A-Z</option>
           </select>
         </div>
-        <div class="col-md-4 d-flex align-items-end">
+        <div class="col-md-2 d-flex align-items-end">
           <button class="btn btn-modern-outline w-100" onclick="resetOppFilters()">
-            <i class="fas fa-redo"></i> Reset Filters
+            <i class="fas fa-redo"></i> Reset
           </button>
         </div>
       </div>
@@ -684,11 +703,14 @@
 <script>
   // Apply filters for Current Engagements
   function applyFilters() {
+    const name = document.getElementById('nameFilter').value;
     const status = document.getElementById('statusFilter').value;
     const client = document.getElementById('clientFilter').value;
     const sort = document.getElementById('sortBy').value;
     
     const url = new URL(window.location.href);
+    if (name) url.searchParams.set('name', name);
+    else url.searchParams.delete('name');
     url.searchParams.set('status', status);
     url.searchParams.set('client', client);
     url.searchParams.set('sort', sort);
@@ -699,6 +721,7 @@
   // Reset filters for Current Engagements
   function resetFilters() {
     const url = new URL(window.location.href);
+    url.searchParams.delete('name');
     url.searchParams.delete('status');
     url.searchParams.delete('client');
     url.searchParams.delete('sort');
@@ -708,10 +731,15 @@
   
   // Apply filters for Pipeline/Opportunities
   function applyOppFilters() {
+    const oppName = document.getElementById('oppNameFilter').value;
+    const oppClient = document.getElementById('oppClientFilter').value;
     const oppStatus = document.getElementById('oppStatusFilter').value;
     const oppSort = document.getElementById('oppSort').value;
     
     const url = new URL(window.location.href);
+    if (oppName) url.searchParams.set('opp_name', oppName);
+    else url.searchParams.delete('opp_name');
+    url.searchParams.set('opp_client', oppClient);
     url.searchParams.set('opp_status', oppStatus);
     url.searchParams.set('opp_sort', oppSort);
     
@@ -721,6 +749,8 @@
   // Reset filters for Pipeline/Opportunities
   function resetOppFilters() {
     const url = new URL(window.location.href);
+    url.searchParams.delete('opp_name');
+    url.searchParams.delete('opp_client');
     url.searchParams.delete('opp_status');
     url.searchParams.delete('opp_sort');
     

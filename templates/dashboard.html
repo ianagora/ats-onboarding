@@ -589,6 +589,25 @@
             </div>
         </a>
 
+        <!-- Active Vacancies -->
+        <a href="{{ url_for('jobs') }}" class="kpi-card">
+            <div class="kpi-header">
+                <div class="kpi-icon">
+                    <i class="fas fa-briefcase-medical"></i>
+                </div>
+                <div class="kpi-info">
+                    <div class="kpi-label">Active Vacancies</div>
+                    <div class="kpi-value">{{ active_vacancies|default(0) }}</div>
+                </div>
+            </div>
+            <div class="kpi-stats">
+                <div class="kpi-chip">
+                    <i class="fas fa-door-open"></i>
+                    Open Positions
+                </div>
+            </div>
+        </a>
+
         <!-- New Applications by Engagement -->
         <a href="{{ url_for('applications') }}" class="kpi-card">
             <div class="kpi-header">

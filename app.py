@@ -1990,6 +1990,11 @@ def index():
             key=lambda x: x['count'],
             reverse=True
         )[:2]
+        
+        # Count active vacancies (Open jobs)
+        active_vacancies = s.scalar(
+            select(func.count(Job.id)).where(Job.status == "Open")
+        ) or 0
 
         # Eager-load engagement so templates can safely access j.engagement.name
         recent_jobs = s.scalars(
@@ -2097,6 +2102,7 @@ def index():
         total_active_engagements=total_active_engagements,
         total_new_apps_7d=total_new_apps_7d,
         top_engagements=top_engagements,
+        active_vacancies=active_vacancies,
     )
 
 @app.route("/action/candidate/regenerate_summary", methods=["POST"])
@@ -3063,15 +3069,22 @@ def create_engagement():
 @app.route("/engagements", methods=["GET"])
 def engagements():
     # Get filter parameters with safe defaults
+    name_filter = request.args.get('name', '').strip()
     status_filter = request.args.get('status', 'all')
     client_filter = request.args.get('client', 'all')
     sort_by = request.args.get('sort', 'created_desc')
+    opp_name_filter = request.args.get('opp_name', '').strip()
+    opp_client_filter = request.args.get('opp_client', 'all')
     opp_status_filter = request.args.get('opp_status', 'all')
     opp_sort = request.args.get('opp_sort', 'created_desc')
     
     with Session(engine) as s:
         # 1. Current engagements with filters
         eng_query = select(Engagement)
+        
+        # Apply name filter (search)
+        if name_filter:
+            eng_query = eng_query.where(Engagement.name.ilike(f'%{name_filter}%'))
         
         # Apply status filter
         if status_filter == 'active':
@@ -3110,9 +3123,31 @@ def engagements():
         except Exception as e:
             print(f"Error getting clients: {e}")
             all_clients = []
+        
+        # Get unique opportunity clients for filter dropdown
+        all_opp_clients = []
+        try:
+            all_opp_clients = s.scalars(
+                select(Opportunity.client)
+                .distinct()
+                .where(Opportunity.client.isnot(None))
+                .where(Opportunity.client != '')
+                .order_by(Opportunity.client)
+            ).all()
+        except Exception as e:
+            print(f"Error getting opportunity clients: {e}")
+            all_opp_clients = []
 
         # 2. All opportunities with filters
         opp_query = select(Opportunity)
+        
+        # Apply opportunity name filter (search)
+        if opp_name_filter:
+            opp_query = opp_query.where(Opportunity.name.ilike(f'%{opp_name_filter}%'))
+        
+        # Apply opportunity client filter
+        if opp_client_filter and opp_client_filter != 'all':
+            opp_query = opp_query.where(Opportunity.client == opp_client_filter)
         
         # Apply opportunity status filter
         if opp_status_filter and opp_status_filter != 'all':
@@ -3184,12 +3219,16 @@ def engagements():
         "engagements.html",
         items=engagements_rows,
         opps=visible_opps,
+        name_filter=name_filter,
         status_filter=status_filter,
         client_filter=client_filter,
         sort_by=sort_by,
+        opp_name_filter=opp_name_filter,
+        opp_client_filter=opp_client_filter,
         opp_status_filter=opp_status_filter,
         opp_sort=opp_sort,
         all_clients=all_clients,
+        all_opp_clients=all_opp_clients,
     )
 
 @app.route("/jobs", methods=["GET","POST"])
