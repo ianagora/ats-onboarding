@@ -367,7 +367,7 @@
   {# =========================
      Active Engagements table
      ========================= #}
-  {% if items or status_filter != 'all' or client_filter != 'all' %}
+  {% if items or (status_filter is defined and status_filter != 'all') or (client_filter is defined and client_filter != 'all') %}
     <div class="modern-card mb-4 fade-in-up stagger-2">
       <div class="card-body p-4">
         <div class="section-header">
@@ -385,18 +385,18 @@
           <div class="col-md-3">
             <label class="form-label small text-muted fw-bold">Status</label>
             <select class="form-select form-select-sm" id="statusFilter" onchange="applyFilters()">
-              <option value="all" {{ 'selected' if status_filter == 'all' else '' }}>All Statuses</option>
-              <option value="active" {{ 'selected' if status_filter == 'active' else '' }}>Active Only</option>
-              <option value="inactive" {{ 'selected' if status_filter == 'inactive' else '' }}>Inactive Only</option>
+              <option value="all" {{ 'selected' if (status_filter is defined and status_filter == 'all') or status_filter is not defined else '' }}>All Statuses</option>
+              <option value="active" {{ 'selected' if status_filter is defined and status_filter == 'active' else '' }}>Active Only</option>
+              <option value="inactive" {{ 'selected' if status_filter is defined and status_filter == 'inactive' else '' }}>Inactive Only</option>
             </select>
           </div>
           <div class="col-md-3">
             <label class="form-label small text-muted fw-bold">Client</label>
             <select class="form-select form-select-sm" id="clientFilter" onchange="applyFilters()">
-              <option value="all" {{ 'selected' if client_filter == 'all' else '' }}>All Clients</option>
-              {% if all_clients %}
+              <option value="all" {{ 'selected' if (client_filter is defined and client_filter == 'all') or client_filter is not defined else '' }}>All Clients</option>
+              {% if all_clients is defined and all_clients %}
                 {% for client in all_clients %}
-                <option value="{{ client }}" {{ 'selected' if client_filter == client else '' }}>{{ client }}</option>
+                <option value="{{ client }}" {{ 'selected' if client_filter is defined and client_filter == client else '' }}>{{ client }}</option>
                 {% endfor %}
               {% endif %}
             </select>
@@ -404,11 +404,11 @@
           <div class="col-md-3">
             <label class="form-label small text-muted fw-bold">Sort By</label>
             <select class="form-select form-select-sm" id="sortBy" onchange="applyFilters()">
-              <option value="created_desc" {{ 'selected' if sort_by == 'created_desc' else '' }}>Newest First</option>
-              <option value="created_asc" {{ 'selected' if sort_by == 'created_asc' else '' }}>Oldest First</option>
-              <option value="name_asc" {{ 'selected' if sort_by == 'name_asc' else '' }}>Name A-Z</option>
-              <option value="name_desc" {{ 'selected' if sort_by == 'name_desc' else '' }}>Name Z-A</option>
-              <option value="start_date" {{ 'selected' if sort_by == 'start_date' else '' }}>Start Date</option>
+              <option value="created_desc" {{ 'selected' if (sort_by is defined and sort_by == 'created_desc') or sort_by is not defined else '' }}>Newest First</option>
+              <option value="created_asc" {{ 'selected' if sort_by is defined and sort_by == 'created_asc' else '' }}>Oldest First</option>
+              <option value="name_asc" {{ 'selected' if sort_by is defined and sort_by == 'name_asc' else '' }}>Name A-Z</option>
+              <option value="name_desc" {{ 'selected' if sort_by is defined and sort_by == 'name_desc' else '' }}>Name Z-A</option>
+              <option value="start_date" {{ 'selected' if sort_by is defined and sort_by == 'start_date' else '' }}>Start Date</option>
             </select>
           </div>
           <div class="col-md-3 d-flex align-items-end">
@@ -546,21 +546,21 @@
         <div class="col-md-4">
           <label class="form-label small text-muted fw-bold">Stage</label>
           <select class="form-select form-select-sm" id="oppStatusFilter" onchange="applyOppFilters()">
-            <option value="all" {{ 'selected' if opp_status_filter == 'all' else '' }}>All Stages</option>
-            <option value="proposal" {{ 'selected' if opp_status_filter == 'proposal' else '' }}>Proposal</option>
-            <option value="negotiation" {{ 'selected' if opp_status_filter == 'negotiation' else '' }}>Negotiation</option>
-            <option value="closed_won" {{ 'selected' if opp_status_filter == 'closed_won' else '' }}>Closed Won</option>
-            <option value="closed_lost" {{ 'selected' if opp_status_filter == 'closed_lost' else '' }}>Closed Lost</option>
+            <option value="all" {{ 'selected' if (opp_status_filter is defined and opp_status_filter == 'all') or opp_status_filter is not defined else '' }}>All Stages</option>
+            <option value="proposal" {{ 'selected' if opp_status_filter is defined and opp_status_filter == 'proposal' else '' }}>Proposal</option>
+            <option value="negotiation" {{ 'selected' if opp_status_filter is defined and opp_status_filter == 'negotiation' else '' }}>Negotiation</option>
+            <option value="closed_won" {{ 'selected' if opp_status_filter is defined and opp_status_filter == 'closed_won' else '' }}>Closed Won</option>
+            <option value="closed_lost" {{ 'selected' if opp_status_filter is defined and opp_status_filter == 'closed_lost' else '' }}>Closed Lost</option>
           </select>
         </div>
         <div class="col-md-4">
           <label class="form-label small text-muted fw-bold">Sort By</label>
           <select class="form-select form-select-sm" id="oppSort" onchange="applyOppFilters()">
-            <option value="created_desc" {{ 'selected' if opp_sort == 'created_desc' else '' }}>Newest First</option>
-            <option value="created_asc" {{ 'selected' if opp_sort == 'created_asc' else '' }}>Oldest First</option>
-            <option value="value_desc" {{ 'selected' if opp_sort == 'value_desc' else '' }}>Highest Value</option>
-            <option value="value_asc" {{ 'selected' if opp_sort == 'value_asc' else '' }}>Lowest Value</option>
-            <option value="name_asc" {{ 'selected' if opp_sort == 'name_asc' else '' }}>Name A-Z</option>
+            <option value="created_desc" {{ 'selected' if (opp_sort is defined and opp_sort == 'created_desc') or opp_sort is not defined else '' }}>Newest First</option>
+            <option value="created_asc" {{ 'selected' if opp_sort is defined and opp_sort == 'created_asc' else '' }}>Oldest First</option>
+            <option value="value_desc" {{ 'selected' if opp_sort is defined and opp_sort == 'value_desc' else '' }}>Highest Value</option>
+            <option value="value_asc" {{ 'selected' if opp_sort is defined and opp_sort == 'value_asc' else '' }}>Lowest Value</option>
+            <option value="name_asc" {{ 'selected' if opp_sort is defined and opp_sort == 'name_asc' else '' }}>Name A-Z</option>
           </select>
         </div>
         <div class="col-md-4 d-flex align-items-end">
