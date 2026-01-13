@@ -3151,20 +3151,6 @@ def engagements():
         except Exception as e:
             print(f"Error getting opportunity clients: {e}")
             all_opp_clients = []
-        
-        # Get unique opportunity names for filter dropdown
-        all_opportunity_names = []
-        try:
-            all_opportunity_names = s.scalars(
-                select(Opportunity.name)
-                .distinct()
-                .where(Opportunity.name.isnot(None))
-                .where(Opportunity.name != '')
-                .order_by(Opportunity.name)
-            ).all()
-        except Exception as e:
-            print(f"Error getting opportunity names: {e}")
-            all_opportunity_names = []
 
         # 2. All opportunities with filters
         opp_query = select(Opportunity)
@@ -3242,6 +3228,9 @@ def engagements():
                 # skip, it'll show up in Current Engagements
                 continue
             visible_opps.append(o)
+        
+        # Get unique opportunity names from visible opportunities only
+        all_opportunity_names = sorted(list(set([o.name for o in visible_opps if o.name])))
 
     return render_template(
         "engagements.html",
