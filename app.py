@@ -2112,7 +2112,7 @@ def slugify_role(name: str) -> str:
 from sqlalchemy.orm import selectinload  # make sure this import exists
 
 @app.route("/")
-@login_required
+# @login_required  # TEMPORARILY DISABLED FOR TROUBLESHOOTING
 def index():
     now = datetime.datetime.utcnow()
     d7  = now - datetime.timedelta(days=7)
