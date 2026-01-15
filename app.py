@@ -277,6 +277,62 @@ def logout():
     flash("You have been logged out", "info")
     return redirect(url_for('login'))
 
+# ========== TEMPORARY: Admin User Management ==========
+@app.route("/admin/create-user", methods=["GET", "POST"])
+def admin_create_user():
+    """Temporary page to manually create admin user"""
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        role = request.form.get("role", "employee")
+        
+        if not name or not email or not password:
+            flash("All fields are required", "error")
+            return render_template("admin_create_user.html")
+        
+        try:
+            with Session(engine) as s:
+                # Check if user already exists
+                existing = s.scalar(select(User).where(User.email == email))
+                if existing:
+                    flash(f"User with email {email} already exists!", "error")
+                    return render_template("admin_create_user.html")
+                
+                # Create new user
+                new_user = User(
+                    name=name,
+                    email=email,
+                    password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
+                    role=role,
+                    is_active=True,
+                    created_at=datetime.datetime.utcnow()
+                )
+                s.add(new_user)
+                s.commit()
+                
+                flash(f"✅ User created successfully! Email: {email}, Role: {role}", "success")
+                return redirect(url_for('admin_list_users'))
+        except Exception as e:
+            flash(f"Error creating user: {str(e)}", "error")
+            return render_template("admin_create_user.html")
+    
+    return render_template("admin_create_user.html")
+
+@app.route("/admin/list-users")
+def admin_list_users():
+    """Temporary page to list all users"""
+    try:
+        with Session(engine) as s:
+            users = s.scalars(select(User).order_by(User.created_at.desc())).all()
+            # Detach from session
+            for user in users:
+                s.expunge(user)
+            return render_template("admin_list_users.html", users=users)
+    except Exception as e:
+        flash(f"Error loading users: {str(e)}", "error")
+        return render_template("admin_list_users.html", users=[])
+
 @app.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
