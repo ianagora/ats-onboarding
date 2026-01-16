@@ -292,16 +292,9 @@ def db_schema_diagnostic():
                 if 'password' in row[0].lower():
                     password_columns.append(row[0])
             
-            # Check if any admin users exist
-            admin_count_result = s.execute(text("""
-                SELECT COUNT(*) FROM users WHERE role IN ('admin', 'super_admin')
-            """))
-            admin_count = admin_count_result.scalar()
-            
             return jsonify({
                 "users_table_columns": columns,
                 "password_related_columns": password_columns,
-                "admin_count": admin_count,
                 "note": "This diagnostic endpoint will be removed after fixing the schema issue"
             }), 200
             
