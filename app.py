@@ -474,9 +474,24 @@ def login():
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
             
+            # Check if account is locked
+            if user.is_locked():
+                remaining_time = user.locked_until - datetime.datetime.utcnow()
+                remaining_minutes = int(remaining_time.total_seconds() / 60) + 1
+                log_audit_event('login', 'auth', 
+                              f'Locked account login attempt for {email}',
+                              details={'remaining_minutes': remaining_minutes},
+                              status='failure')
+                flash(f"Account locked due to too many failed login attempts. Try again in {remaining_minutes} minutes.", "error")
+                return render_template("login.html")
+            
             # Check password
             if check_password_hash(user.password_hash, password):
-                # Successful login
+                # Successful login - reset failed attempts
+                user.failed_login_attempts = 0
+                user.locked_until = None
+                user.last_login = datetime.datetime.utcnow()
+                s.commit()
                 s.expunge(user)
                 
                 # Check for Remember Me checkbox
@@ -488,13 +503,33 @@ def login():
                     login_user(user, remember=False)
                     session.permanent = True
                 
+                # Log successful login
+                log_audit_event('login', 'auth', f'Successful login for {email}', status='success')
+                
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
-                # Failed login
-                flash("Invalid email or password", "error")
+                # Failed login - increment attempts
+                user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+                
+                # Lock account after 5 failed attempts
+                if user.failed_login_attempts >= 5:
+                    user.locked_until = datetime.datetime.utcnow() + timedelta(minutes=30)
+                    s.commit()
+                    log_audit_event('login', 'auth', 
+                                  f'Account locked for {email} after 5 failed attempts',
+                                  status='warning')
+                    flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
+                else:
+                    s.commit()
+                    remaining = 5 - user.failed_login_attempts
+                    log_audit_event('login', 'auth', 
+                                  f'Failed login attempt for {email}',
+                                  details={'attempts': user.failed_login_attempts, 'remaining': remaining},
+                                  status='failure')
+                    flash(f"Invalid email or password. {remaining} attempts remaining before lockout.", "error")
     
     return render_template("login.html")
 
@@ -879,26 +914,12 @@ class User(Base, UserMixin):
     password_hash = Column('pw_hash', String(255), nullable=False)
     created_at = Column(DateTime, nullable=True)
     
-    # Security columns - using properties since columns don't exist yet
-    @property
-    def role(self):
-        return 'employee'
-    
-    @property
-    def is_active(self):
-        return True
-    
-    @property  
-    def last_login(self):
-        return None
-    
-    @property
-    def failed_login_attempts(self):
-        return 0
-    
-    @property
-    def locked_until(self):
-        return None
+    # Security columns - NOW ENABLED (migration completed)
+    role = Column(String(50), default='employee', nullable=True)
+    is_active = Column(Boolean, default=True, nullable=True)
+    last_login = Column(DateTime, nullable=True)
+    failed_login_attempts = Column(Integer, default=0, nullable=True)
+    locked_until = Column(DateTime, nullable=True)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
@@ -907,8 +928,10 @@ class User(Base, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def is_locked(self):
-        """Account lockout disabled - columns don't exist yet"""
-        return False
+        """Check if account is currently locked"""
+        if self.locked_until is None:
+            return False
+        return self.locked_until > datetime.datetime.utcnow()
 
 class AuditLog(Base):
     """Comprehensive audit logging for security and compliance"""
