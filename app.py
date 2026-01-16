@@ -301,12 +301,18 @@ def login():
             user = s.scalar(select(User).where(User.email == email))
             
             if not user:
+                # Log failed login attempt (user not found)
+                log_audit_event('login', 'auth', f'Failed login attempt for {email}', 
+                              details={'reason': 'user_not_found'}, status='failure')
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
             
             # Check if account is locked
             if user.is_locked():
                 remaining_time = (user.locked_until - datetime.datetime.utcnow()).total_seconds() / 60
+                # Log locked account attempt
+                log_audit_event('login', 'security', f'Attempted login to locked account: {email}',
+                              details={'remaining_minutes': int(remaining_time)}, status='warning')
                 flash(f"Account locked due to too many failed attempts. Try again in {int(remaining_time)} minutes.", "error")
                 return render_template("login.html")
             
@@ -331,6 +337,10 @@ def login():
                     login_user(user, remember=False)
                     session.permanent = True  # Enable PERMANENT_SESSION_LIFETIME
                 
+                # Log successful login
+                log_audit_event('login', 'auth', f'User logged in successfully',
+                              details={'remember_me': remember})
+                
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
@@ -343,10 +353,17 @@ def login():
                     # Lock account for 30 minutes
                     user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
                     s.commit()
+                    # Log account lockout
+                    log_audit_event('lockout', 'security', f'Account locked after 5 failed attempts: {email}',
+                                  'user', user.id, status='warning')
                     flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
                 else:
                     remaining = 5 - user.failed_login_attempts
                     s.commit()
+                    # Log failed password attempt
+                    log_audit_event('login', 'auth', f'Failed login attempt for {email}',
+                                  details={'attempts': user.failed_login_attempts, 'remaining': remaining},
+                                  status='failure')
                     flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
     
     return render_template("login.html")
@@ -355,6 +372,8 @@ def login():
 @login_required
 def logout():
     """Staff logout"""
+    # Log logout before clearing session
+    log_audit_event('logout', 'auth', 'User logged out')
     logout_user()
     flash("You have been logged out", "info")
     return redirect(url_for('login'))
@@ -440,6 +459,10 @@ def admin_unlock_user(user_id):
         user.locked_until = None
         s.commit()
         
+        # Log unlock action
+        log_audit_event('unlock', 'user_mgmt', f'Unlocked user account: {user.email}',
+                      'user', user.id)
+        
         flash(f"User {user.email} unlocked successfully", "success")
     
     return redirect(url_for('admin_list_users'))
@@ -499,6 +522,51 @@ def validate_password_strength(password: str, email: str = None) -> Tuple[bool, 
         return False, f"Password must contain {', '.join(errors)}", score
     
     return True, "Strong password", score
+
+# ========== Audit Logging Functions ==========
+
+def log_audit_event(event_type: str, event_category: str, action: str, 
+                   resource_type: str = None, resource_id: int = None,
+                   details: dict = None, status: str = 'success'):
+    """
+    Log an audit event for security and compliance tracking.
+    
+    Args:
+        event_type: Type of event (login, logout, create, update, delete, view, export)
+        event_category: Category (auth, user_mgmt, data_access, security)
+        action: Description of the action taken
+        resource_type: Type of resource affected (candidate, job, user, etc.)
+        resource_id: ID of the affected resource
+        details: Additional details as dictionary (will be JSON encoded)
+        status: Result status (success, failure, warning)
+    
+    Examples:
+        log_audit_event('login', 'auth', 'User logged in successfully')
+        log_audit_event('create', 'user_mgmt', 'Created new user', 'user', new_user.id)
+        log_audit_event('view', 'data_access', 'Viewed candidate profile', 'candidate', cand_id)
+        log_audit_event('login', 'auth', 'Failed login attempt', status='failure')
+    """
+    try:
+        log = AuditLog(
+            user_id=current_user.id if current_user.is_authenticated else None,
+            user_email=current_user.email if current_user.is_authenticated else None,
+            event_type=event_type,
+            event_category=event_category,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            action=action,
+            details=json.dumps(details) if details else None,
+            ip_address=request.remote_addr if request else None,
+            user_agent=request.headers.get('User-Agent') if request else None,
+            status=status
+        )
+        
+        with Session(engine) as s:
+            s.add(log)
+            s.commit()
+    except Exception as e:
+        # Don't let audit logging failures break the application
+        current_app.logger.error(f"Audit logging failed: {str(e)}")
 
 @login_required
 @app.route("/admin/system-diagnostics")
@@ -576,6 +644,10 @@ def change_password():
             # Update password
             user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
             s.commit()
+            
+            # Log password change
+            log_audit_event('update', 'user_mgmt', 'Changed password', 'user', current_user.id)
+            
             flash("Password changed successfully", "success")
             return redirect(url_for('index'))
     
@@ -627,6 +699,24 @@ class User(Base, UserMixin):
         if self.locked_until and self.locked_until > datetime.datetime.utcnow():
             return True
         return False
+
+class AuditLog(Base):
+    """Comprehensive audit logging for security and compliance"""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True, index=True)
+    event_type = Column(String(50), nullable=False, index=True)  # login, logout, create, update, delete, view, export
+    event_category = Column(String(50), nullable=False, index=True)  # auth, user_mgmt, data_access, security
+    resource_type = Column(String(50), nullable=True)  # candidate, job, engagement, user
+    resource_id = Column(Integer, nullable=True)
+    action = Column(String(255), nullable=False)
+    details = Column(Text, nullable=True)  # JSON string with additional info
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, default='success')  # success, failure, warning
 
 class CandidateTag(Base):
     __tablename__ = "candidate_tags"
@@ -6725,4 +6815,7 @@ def download_cv(fname):
     return send_from_directory(os.path.join(app.config["UPLOAD_FOLDER"], "cvs"), fname, as_attachment=True)
 
 if __name__ == "__main__":
+    with app.app_context():
+        Base.metadata.create_all(engine)
+        ensure_schema()
     app.run(debug=True)
