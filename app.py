@@ -364,15 +364,8 @@ def login():
             
             # Check password
             if check_password_hash(user.password_hash, password):
-                # Successful login - reset failed attempts if columns exist
-                try:
-                    user.failed_login_attempts = 0
-                    user.locked_until = None
-                    user.last_login = datetime.datetime.utcnow()
-                except AttributeError:
-                    pass  # Security columns don't exist
-                
-                s.commit()
+                # Successful login
+                # Note: Security columns don't exist yet, so we skip updating them
                 s.expunge(user)
                 
                 # Check for Remember Me checkbox
@@ -386,39 +379,13 @@ def login():
                     login_user(user, remember=False)
                     session.permanent = True  # Enable PERMANENT_SESSION_LIFETIME
                 
-                # Log successful login
-                try:
-                    log_audit_event('login', 'auth', f'User logged in successfully',
-                                  details={'remember_me': remember})
-                except:
-                    pass  # Audit logging might fail
-                
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
-                # Failed login - increment counter if column exists
-                try:
-                    user.failed_login_attempts = getattr(user, 'failed_login_attempts', 0) + 1
-                    
-                    if user.failed_login_attempts >= 5:
-                        # Lock account for 30 minutes
-                        user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-                        s.commit()
-                        log_audit_event('lockout', 'security', f'Account locked after 5 failed attempts: {email}',
-                                      'user', user.id, status='warning')
-                        flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
-                    else:
-                        remaining = 5 - user.failed_login_attempts
-                        s.commit()
-                        log_audit_event('login', 'auth', f'Failed login attempt for {email}',
-                                      details={'attempts': user.failed_login_attempts, 'remaining': remaining},
-                                      status='failure')
-                        flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
-                except (AttributeError, TypeError):
-                    # Security columns don't exist - just show generic error
-                    flash("Invalid email or password", "error")
+                # Failed login - just show error (no lockout since columns don't exist)
+                flash("Invalid email or password", "error")
     
     return render_template("login.html")
 
@@ -558,30 +525,32 @@ def admin_list_users():
         flash(f"Error loading users: {str(e)}", "error")
         return render_template("admin_list_users.html", users=[])
 
-@login_required
-@app.route("/admin/unlock-user/<int:user_id>", methods=["POST"])
-def admin_unlock_user(user_id):
-    """Admin route to unlock a locked user account"""
-    if current_user.role not in ['admin', 'super_admin']:
-        abort(403)
-    
-    with Session(engine) as s:
-        user = s.get(User, user_id)
-        if not user:
-            flash("User not found", "error")
-            return redirect(url_for('admin_list_users'))
-        
-        user.failed_login_attempts = 0
-        user.locked_until = None
-        s.commit()
-        
-        # Log unlock action
-        log_audit_event('unlock', 'user_mgmt', f'Unlocked user account: {user.email}',
-                      'user', user.id)
-        
-        flash(f"User {user.email} unlocked successfully", "success")
-    
-    return redirect(url_for('admin_list_users'))
+# Temporarily disabled - requires security columns that don't exist yet
+# @login_required
+# @app.route("/admin/unlock-user/<int:user_id>", methods=["POST"])
+# def admin_unlock_user(user_id):
+#     """Admin route to unlock a locked user account"""
+#     if current_user.role not in ['admin', 'super_admin']:
+#         abort(403)
+#     
+#     with Session(engine) as s:
+#         user = s.get(User, user_id)
+#         if not user:
+#             flash("User not found", "error")
+#             return redirect(url_for('admin_list_users'))
+#         
+#         user.failed_login_attempts = 0
+#         user.locked_until = None
+#         s.commit()
+#         
+#         # Log unlock action
+#         log_audit_event('unlock', 'user_mgmt', f'Unlocked user account: {user.email}',
+#                       'user', user.id)
+#         
+#         flash(f"User {user.email} unlocked successfully", "success")
+#     
+#     return redirect(url_for('admin_list_users'))
+
 
 # ========== Password Security Functions ==========
 
