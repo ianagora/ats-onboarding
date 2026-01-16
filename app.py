@@ -795,17 +795,40 @@ from sqlalchemy import String, Integer, DateTime, Boolean
 class User(Base, UserMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    email = Column(String(200), unique=True, nullable=False, index=True)
     name = Column(String(200), nullable=False)
+    email = Column(String(200), unique=True, nullable=False, index=True)
     # Map to actual database column name
     password_hash = Column('pw_hash', String(255), nullable=False)
-    # Security columns - optional for backward compatibility with old schema
-    role = Column(String(50), default="employee", nullable=True)  # employee, admin, super_admin
-    is_active = Column(Boolean, default=True, nullable=True)
-    last_login = Column(DateTime, nullable=True)
-    failed_login_attempts = Column(Integer, default=0, nullable=True)
-    locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=True)
+    
+    # Security columns - commented out until migration is run
+    # These columns don't exist in production database yet
+    # role = Column(String(50), default="employee", nullable=True)
+    # is_active = Column(Boolean, default=True, nullable=True)
+    # last_login = Column(DateTime, nullable=True)
+    # failed_login_attempts = Column(Integer, default=0, nullable=True)
+    # locked_until = Column(DateTime, nullable=True)
+    
+    # Provide default values for missing columns as properties
+    @property
+    def role(self):
+        return getattr(self, '_role', 'employee')
+    
+    @property
+    def is_active(self):
+        return getattr(self, '_is_active', True)
+    
+    @property  
+    def last_login(self):
+        return getattr(self, '_last_login', None)
+    
+    @property
+    def failed_login_attempts(self):
+        return getattr(self, '_failed_login_attempts', 0)
+    
+    @property
+    def locked_until(self):
+        return getattr(self, '_locked_until', None)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
@@ -814,10 +837,8 @@ class User(Base, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def is_locked(self):
-        # If locked_until column doesn't exist, user is never locked
-        if not hasattr(self, 'locked_until') or self.locked_until is None:
-            return False
-        return self.locked_until > datetime.datetime.utcnow()
+        # Since locked_until column doesn't exist, user is never locked
+        return False
 
 class AuditLog(Base):
     """Comprehensive audit logging for security and compliance"""
