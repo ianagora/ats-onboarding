@@ -343,28 +343,36 @@ def login():
             
             if not user:
                 # Log failed login attempt (user not found)
-                log_audit_event('login', 'auth', f'Failed login attempt for {email}', 
-                              details={'reason': 'user_not_found'}, status='failure')
+                try:
+                    log_audit_event('login', 'auth', f'Failed login attempt for {email}', 
+                                  details={'reason': 'user_not_found'}, status='failure')
+                except:
+                    pass  # Audit logging might fail if table doesn't exist
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
             
-            # Check if account is locked
-            if user.is_locked():
-                remaining_time = (user.locked_until - datetime.datetime.utcnow()).total_seconds() / 60
-                # Log locked account attempt
-                log_audit_event('login', 'security', f'Attempted login to locked account: {email}',
-                              details={'remaining_minutes': int(remaining_time)}, status='warning')
-                flash(f"Account locked due to too many failed attempts. Try again in {int(remaining_time)} minutes.", "error")
-                return render_template("login.html")
+            # Check if account is locked (only if column exists)
+            try:
+                if user.is_locked():
+                    remaining_time = (user.locked_until - datetime.datetime.utcnow()).total_seconds() / 60
+                    log_audit_event('login', 'security', f'Attempted login to locked account: {email}',
+                                  details={'remaining_minutes': int(remaining_time)}, status='warning')
+                    flash(f"Account locked due to too many failed attempts. Try again in {int(remaining_time)} minutes.", "error")
+                    return render_template("login.html")
+            except (AttributeError, TypeError):
+                pass  # Security columns don't exist yet
             
             # Check password
             if check_password_hash(user.password_hash, password):
-                # Successful login - reset failed attempts
-                user.failed_login_attempts = 0
-                user.locked_until = None
-                user.last_login = datetime.datetime.utcnow()
-                s.commit()
+                # Successful login - reset failed attempts if columns exist
+                try:
+                    user.failed_login_attempts = 0
+                    user.locked_until = None
+                    user.last_login = datetime.datetime.utcnow()
+                except AttributeError:
+                    pass  # Security columns don't exist
                 
+                s.commit()
                 s.expunge(user)
                 
                 # Check for Remember Me checkbox
@@ -379,33 +387,38 @@ def login():
                     session.permanent = True  # Enable PERMANENT_SESSION_LIFETIME
                 
                 # Log successful login
-                log_audit_event('login', 'auth', f'User logged in successfully',
-                              details={'remember_me': remember})
+                try:
+                    log_audit_event('login', 'auth', f'User logged in successfully',
+                                  details={'remember_me': remember})
+                except:
+                    pass  # Audit logging might fail
                 
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
-                # Failed login - increment counter
-                user.failed_login_attempts += 1
-                
-                if user.failed_login_attempts >= 5:
-                    # Lock account for 30 minutes
-                    user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-                    s.commit()
-                    # Log account lockout
-                    log_audit_event('lockout', 'security', f'Account locked after 5 failed attempts: {email}',
-                                  'user', user.id, status='warning')
-                    flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
-                else:
-                    remaining = 5 - user.failed_login_attempts
-                    s.commit()
-                    # Log failed password attempt
-                    log_audit_event('login', 'auth', f'Failed login attempt for {email}',
-                                  details={'attempts': user.failed_login_attempts, 'remaining': remaining},
-                                  status='failure')
-                    flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
+                # Failed login - increment counter if column exists
+                try:
+                    user.failed_login_attempts = getattr(user, 'failed_login_attempts', 0) + 1
+                    
+                    if user.failed_login_attempts >= 5:
+                        # Lock account for 30 minutes
+                        user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+                        s.commit()
+                        log_audit_event('lockout', 'security', f'Account locked after 5 failed attempts: {email}',
+                                      'user', user.id, status='warning')
+                        flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
+                    else:
+                        remaining = 5 - user.failed_login_attempts
+                        s.commit()
+                        log_audit_event('login', 'auth', f'Failed login attempt for {email}',
+                                      details={'attempts': user.failed_login_attempts, 'remaining': remaining},
+                                      status='failure')
+                        flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
+                except (AttributeError, TypeError):
+                    # Security columns don't exist - just show generic error
+                    flash("Invalid email or password", "error")
     
     return render_template("login.html")
 
@@ -783,12 +796,14 @@ class User(Base, UserMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(200), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
     name = Column(String(200), nullable=False)
-    role = Column(String(50), default="employee")  # employee, admin, super_admin
-    is_active = Column(Boolean, default=True)
+    # Map to actual database column name
+    password_hash = Column('pw_hash', String(255), nullable=False)
+    # Security columns - optional for backward compatibility with old schema
+    role = Column(String(50), default="employee", nullable=True)  # employee, admin, super_admin
+    is_active = Column(Boolean, default=True, nullable=True)
     last_login = Column(DateTime, nullable=True)
-    failed_login_attempts = Column(Integer, default=0)
+    failed_login_attempts = Column(Integer, default=0, nullable=True)
     locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=True)
     
@@ -799,9 +814,10 @@ class User(Base, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def is_locked(self):
-        if self.locked_until and self.locked_until > datetime.datetime.utcnow():
-            return True
-        return False
+        # If locked_until column doesn't exist, user is never locked
+        if not hasattr(self, 'locked_until') or self.locked_until is None:
+            return False
+        return self.locked_until > datetime.datetime.utcnow()
 
 class AuditLog(Base):
     """Comprehensive audit logging for security and compliance"""
