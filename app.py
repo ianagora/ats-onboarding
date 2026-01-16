@@ -1582,64 +1582,80 @@ def ensure_schema():
             pass
 
         # ===== SECURITY: Add security columns to users table (CREST compliance) =====
-        print("🔐 Running security migration...")
-        security_columns = [
-            "role VARCHAR(50) DEFAULT 'employee'",
-            "is_active BOOLEAN DEFAULT TRUE",
-            "last_login TIMESTAMP",
-            "failed_login_attempts INTEGER DEFAULT 0",
-            "locked_until TIMESTAMP"
-        ]
-        
-        for col_def in security_columns:
-            col_name = col_def.split()[0]
-            try:
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_def}"))
-                print(f"  ✓ Added column: {col_name}")
-            except Exception as e:
-                # Column might already exist
-                pass
-        
-        # Create audit_logs table
         try:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id SERIAL PRIMARY KEY,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    user_id INTEGER,
-                    user_email VARCHAR(255),
-                    event_type VARCHAR(50) NOT NULL,
-                    event_category VARCHAR(50) NOT NULL,
-                    resource_type VARCHAR(50),
-                    resource_id INTEGER,
-                    action VARCHAR(255) NOT NULL,
-                    details TEXT,
-                    status VARCHAR(20) DEFAULT 'success',
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-                )
-            """))
-            print("  ✓ Created audit_logs table")
-        except Exception:
-            pass
-        
-        # Create indexes for performance and security
-        indexes = [
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_email ON audit_logs(user_email)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_category ON audit_logs(event_category)",
-            "CREATE INDEX IF NOT EXISTS idx_users_email_idx ON users(email)",
-            "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)"
-        ]
-        
-        for idx_stmt in indexes:
+            print("🔐 Running security migration...")
+            
+            # Check which columns already exist
+            existing_cols = set()
             try:
-                conn.execute(text(idx_stmt))
+                result = conn.execute(text("""
+                    SELECT column_name FROM information_schema.columns 
+                    WHERE table_name = 'users'
+                """))
+                existing_cols = {row[0] for row in result}
             except Exception:
                 pass
-        
-        print("✅ Security migration complete")
+            
+            # Add security columns if they don't exist
+            security_columns = {
+                "role": "VARCHAR(50) DEFAULT 'employee'",
+                "is_active": "BOOLEAN DEFAULT TRUE",
+                "last_login": "TIMESTAMP",
+                "failed_login_attempts": "INTEGER DEFAULT 0",
+                "locked_until": "TIMESTAMP"
+            }
+            
+            for col_name, col_def in security_columns.items():
+                if col_name not in existing_cols:
+                    try:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
+                        print(f"  ✓ Added column: {col_name}")
+                    except Exception as e:
+                        print(f"  ⚠ Could not add {col_name}: {e}")
+            
+            # Create audit_logs table
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS audit_logs (
+                        id SERIAL PRIMARY KEY,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        user_id INTEGER,
+                        user_email VARCHAR(255),
+                        event_type VARCHAR(50) NOT NULL,
+                        event_category VARCHAR(50) NOT NULL,
+                        resource_type VARCHAR(50),
+                        resource_id INTEGER,
+                        action VARCHAR(255) NOT NULL,
+                        details TEXT,
+                        status VARCHAR(20) DEFAULT 'success',
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                    )
+                """))
+                print("  ✓ Created audit_logs table")
+            except Exception as e:
+                print(f"  ⚠ audit_logs: {e}")
+            
+            # Create indexes for performance and security
+            indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_email ON audit_logs(user_email)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_category ON audit_logs(event_category)",
+                "CREATE INDEX IF NOT EXISTS idx_users_email_idx ON users(email)",
+                "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)"
+            ]
+            
+            for idx_stmt in indexes:
+                try:
+                    conn.execute(text(idx_stmt))
+                except Exception:
+                    pass
+            
+            print("✅ Security migration complete")
+        except Exception as e:
+            print(f"❌ Security migration failed: {e}")
+            # Don't crash - continue with app startup
 
         # ===== Seed admin user if no users exist =====
         try:
