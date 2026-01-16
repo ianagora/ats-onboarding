@@ -296,6 +296,7 @@ def load_user(user_id):
 # ========== Authentication Routes ==========
 
 @app.route("/setup-first-user", methods=["GET", "POST"])
+@limiter.limit("5 per hour")  # Rate limit: 5 setup attempts per hour per IP
 def setup_first_user():
     """
     One-time setup route to create the first admin user
@@ -452,6 +453,7 @@ def run_migration():
         return f"<pre>❌ Migration failed:\n\n{str(e)}\n\n{traceback.format_exc()}</pre>", 500
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")  # Rate limit: 10 login attempts per minute per IP
 def login():
     """Staff login page with full security features"""
     if current_user.is_authenticated:
@@ -538,6 +540,15 @@ def login():
                 except:
                     pass  # Continue even if security updates fail
                 
+                # Check if 2FA is enabled
+                if user.totp_enabled:
+                    # Store user ID in session for 2FA verification
+                    session['pending_user_id'] = user.id
+                    session['remember_me'] = request.form.get('remember_me') == 'on'
+                    session['next_page'] = request.args.get('next', '/')
+                    return redirect(url_for('verify_2fa'))
+                
+                # No 2FA - complete login
                 # Detach from session before login
                 s.expunge(user)
             
@@ -920,6 +931,160 @@ def change_password():
     
     return render_template("change_password.html")
 
+# ========== Two-Factor Authentication (2FA) Routes ==========
+
+@app.route("/security/2fa/setup", methods=["GET", "POST"])
+@login_required
+def setup_2fa():
+    """Setup Two-Factor Authentication"""
+    if request.method == "POST":
+        action = request.form.get("action")
+        
+        if action == "generate":
+            # Generate new TOTP secret
+            with Session(engine) as s:
+                user = s.get(User, current_user.id)
+                user.totp_secret = user.generate_totp_secret()
+                s.commit()
+                
+                # Generate QR code
+                import pyotp
+                import qrcode
+                import io
+                import base64
+                
+                totp = pyotp.TOTP(user.totp_secret)
+                provisioning_uri = totp.provisioning_uri(
+                    name=user.email,
+                    issuer_name="ATS Onboarding System"
+                )
+                
+                # Generate QR code image
+                qr = qrcode.QRCode(version=1, box_size=10, border=5)
+                qr.add_data(provisioning_uri)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                # Convert to base64
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
+                
+                return render_template("setup_2fa.html", 
+                                     qr_code=qr_code_base64,
+                                     secret=user.totp_secret,
+                                     step="verify")
+        
+        elif action == "verify":
+            token = request.form.get("token", "").strip()
+            
+            with Session(engine) as s:
+                user = s.get(User, current_user.id)
+                
+                if user.verify_totp(token):
+                    # Enable 2FA
+                    user.totp_enabled = True
+                    
+                    # Generate backup codes
+                    backup_codes = user.generate_backup_codes()
+                    s.commit()
+                    
+                    log_audit_event('update', 'security', '2FA enabled', 'user', current_user.id)
+                    
+                    return render_template("setup_2fa.html",
+                                         step="complete",
+                                         backup_codes=backup_codes)
+                else:
+                    flash("Invalid verification code. Please try again.", "error")
+                    return render_template("setup_2fa.html", step="start")
+    
+    # GET request - show initial setup page
+    with Session(engine) as s:
+        user = s.get(User, current_user.id)
+        if user.totp_enabled:
+            return render_template("setup_2fa.html", step="already_enabled")
+    
+    return render_template("setup_2fa.html", step="start")
+
+@app.route("/security/2fa/disable", methods=["POST"])
+@login_required
+def disable_2fa():
+    """Disable Two-Factor Authentication"""
+    password = request.form.get("password", "")
+    
+    with Session(engine) as s:
+        user = s.get(User, current_user.id)
+        
+        # Verify password before disabling
+        if not user or not check_password_hash(user.password_hash, password):
+            flash("Incorrect password", "error")
+            return redirect(url_for('setup_2fa'))
+        
+        user.totp_enabled = False
+        user.totp_secret = None
+        user.backup_codes = None
+        s.commit()
+        
+        log_audit_event('update', 'security', '2FA disabled', 'user', current_user.id, status='warning')
+        
+        flash("Two-Factor Authentication has been disabled", "success")
+        return redirect(url_for('index'))
+
+@app.route("/security/2fa/verify", methods=["GET", "POST"])
+def verify_2fa():
+    """Verify 2FA token during login"""
+    # This should be called after password verification but before login_user()
+    # User ID should be in session from the initial login attempt
+    
+    if 'pending_user_id' not in session:
+        return redirect(url_for('login'))
+    
+    if request.method == "POST":
+        token = request.form.get("token", "").strip()
+        use_backup = request.form.get("use_backup") == "1"
+        
+        with Session(engine) as s:
+            user = s.get(User, session['pending_user_id'])
+            
+            if not user:
+                session.pop('pending_user_id', None)
+                flash("Session expired. Please login again.", "error")
+                return redirect(url_for('login'))
+            
+            verified = False
+            if use_backup:
+                verified = user.verify_backup_code(token)
+                if verified:
+                    s.commit()  # Save updated backup codes
+                    log_audit_event('login', 'auth', 'Logged in with backup code', 
+                                  'user', user.id, status='warning')
+            else:
+                verified = user.verify_totp(token)
+            
+            if verified:
+                # 2FA successful - complete login
+                session.pop('pending_user_id', None)
+                s.expunge(user)
+                
+                remember = session.get('remember_me', False)
+                session.pop('remember_me', None)
+                
+                if remember:
+                    login_user(user, remember=True, duration=timedelta(days=30))
+                else:
+                    login_user(user, remember=False)
+                    session.permanent = True
+                
+                log_audit_event('login', 'auth', 'Successful 2FA verification', 'user', user.id)
+                
+                next_page = session.get('next_page', '/')
+                session.pop('next_page', None)
+                return redirect(next_page)
+            else:
+                flash("Invalid code. Please try again.", "error")
+    
+    return render_template("verify_2fa.html")
+
 def _signer() -> URLSafeTimedSerializer:
     # used for candidate magic links
     return URLSafeTimedSerializer(app.config["SECRET_KEY"], salt="candidate-login")
@@ -959,6 +1124,16 @@ class User(Base, UserMixin):
     failed_login_attempts = Column(Integer, default=0, nullable=True)
     locked_until = Column(DateTime, nullable=True)
     
+    # 2FA/MFA columns
+    totp_secret = Column(String(32), nullable=True)
+    totp_enabled = Column(Boolean, default=False, nullable=True)
+    backup_codes = Column(Text, nullable=True)  # JSON array of backup codes
+    
+    # Session security columns
+    session_token = Column(String(255), nullable=True)
+    last_ip = Column(String(45), nullable=True)
+    last_user_agent = Column(Text, nullable=True)
+    
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
     
@@ -970,6 +1145,47 @@ class User(Base, UserMixin):
         if self.locked_until is None:
             return False
         return self.locked_until > datetime.datetime.utcnow()
+    
+    def generate_totp_secret(self):
+        """Generate a new TOTP secret for 2FA"""
+        import pyotp
+        return pyotp.random_base32()
+    
+    def verify_totp(self, token):
+        """Verify a TOTP token"""
+        if not self.totp_secret:
+            return False
+        import pyotp
+        totp = pyotp.TOTP(self.totp_secret)
+        return totp.verify(token, valid_window=1)  # Allow 1 window before/after
+    
+    def generate_backup_codes(self, count=10):
+        """Generate backup codes for account recovery"""
+        import secrets
+        codes = [secrets.token_hex(4).upper() for _ in range(count)]
+        self.backup_codes = json.dumps(codes)
+        return codes
+    
+    def verify_backup_code(self, code):
+        """Verify and consume a backup code"""
+        if not self.backup_codes:
+            return False
+        codes = json.loads(self.backup_codes)
+        code = code.upper().replace('-', '')
+        if code in codes:
+            codes.remove(code)
+            self.backup_codes = json.dumps(codes)
+            return True
+        return False
+
+class PasswordHistory(Base):
+    """Track password history to prevent reuse"""
+    __tablename__ = "password_history"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
 
 class AuditLog(Base):
     """Comprehensive audit logging for security and compliance"""
