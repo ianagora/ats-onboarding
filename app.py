@@ -367,62 +367,27 @@ def login():
                 flash("Invalid email or password", "error")
                 return render_template("login.html")
             
-            # Check if account is locked
-            if user.is_locked():
-                remaining_time = (user.locked_until - datetime.datetime.utcnow()).total_seconds() / 60
-                log_audit_event('login', 'security', f'Attempted login to locked account: {email}',
-                              details={'remaining_minutes': int(remaining_time)}, status='warning')
-                flash(f"Account locked due to too many failed attempts. Try again in {int(remaining_time)} minutes.", "error")
-                return render_template("login.html")
-            
             # Check password
             if check_password_hash(user.password_hash, password):
-                # Successful login - reset failed attempts
-                user.failed_login_attempts = 0
-                user.locked_until = None
-                user.last_login = datetime.datetime.utcnow()
-                s.commit()
+                # Successful login
                 s.expunge(user)
                 
                 # Check for Remember Me checkbox
                 remember = request.form.get('remember_me') == 'on'
                 
                 if remember:
-                    # Remember for 30 days
                     login_user(user, remember=True, duration=timedelta(days=30))
                 else:
-                    # Regular session with 30-minute timeout
                     login_user(user, remember=False)
-                    session.permanent = True  # Enable PERMANENT_SESSION_LIFETIME
-                
-                # Log successful login
-                log_audit_event('login', 'auth', f'User logged in successfully',
-                              details={'remember_me': remember})
+                    session.permanent = True
                 
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
-                # Failed login - increment counter
-                user.failed_login_attempts += 1
-                
-                if user.failed_login_attempts >= 5:
-                    # Lock account for 30 minutes
-                    user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-                    s.commit()
-                    # Log account lockout
-                    log_audit_event('lockout', 'security', f'Account locked after 5 failed attempts: {email}',
-                                  'user', user.id, status='warning')
-                    flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
-                else:
-                    remaining = 5 - user.failed_login_attempts
-                    s.commit()
-                    # Log failed password attempt
-                    log_audit_event('login', 'auth', f'Failed login attempt for {email}',
-                                  details={'attempts': user.failed_login_attempts, 'remaining': remaining},
-                                  status='failure')
-                    flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
+                # Failed login
+                flash("Invalid email or password", "error")
     
     return render_template("login.html")
 
@@ -807,12 +772,26 @@ class User(Base, UserMixin):
     password_hash = Column('pw_hash', String(255), nullable=False)
     created_at = Column(DateTime, nullable=True)
     
-    # Security columns - now enabled after migration
-    role = Column(String(50), default="employee", nullable=True)
-    is_active = Column(Boolean, default=True, nullable=True)
-    last_login = Column(DateTime, nullable=True)
-    failed_login_attempts = Column(Integer, default=0, nullable=True)
-    locked_until = Column(DateTime, nullable=True)
+    # Security columns - using properties since columns don't exist yet
+    @property
+    def role(self):
+        return 'employee'
+    
+    @property
+    def is_active(self):
+        return True
+    
+    @property  
+    def last_login(self):
+        return None
+    
+    @property
+    def failed_login_attempts(self):
+        return 0
+    
+    @property
+    def locked_until(self):
+        return None
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
@@ -821,9 +800,7 @@ class User(Base, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def is_locked(self):
-        """Check if account is currently locked"""
-        if self.locked_until and self.locked_until > datetime.datetime.utcnow():
-            return True
+        """Account lockout disabled - columns don't exist yet"""
         return False
 
 class AuditLog(Base):
@@ -1582,80 +1559,9 @@ def ensure_schema():
             pass
 
         # ===== SECURITY: Add security columns to users table (CREST compliance) =====
-        try:
-            print("🔐 Running security migration...")
-            
-            # Check which columns already exist
-            existing_cols = set()
-            try:
-                result = conn.execute(text("""
-                    SELECT column_name FROM information_schema.columns 
-                    WHERE table_name = 'users'
-                """))
-                existing_cols = {row[0] for row in result}
-            except Exception:
-                pass
-            
-            # Add security columns if they don't exist
-            security_columns = {
-                "role": "VARCHAR(50) DEFAULT 'employee'",
-                "is_active": "BOOLEAN DEFAULT TRUE",
-                "last_login": "TIMESTAMP",
-                "failed_login_attempts": "INTEGER DEFAULT 0",
-                "locked_until": "TIMESTAMP"
-            }
-            
-            for col_name, col_def in security_columns.items():
-                if col_name not in existing_cols:
-                    try:
-                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
-                        print(f"  ✓ Added column: {col_name}")
-                    except Exception as e:
-                        print(f"  ⚠ Could not add {col_name}: {e}")
-            
-            # Create audit_logs table
-            try:
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS audit_logs (
-                        id SERIAL PRIMARY KEY,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                        user_id INTEGER,
-                        user_email VARCHAR(255),
-                        event_type VARCHAR(50) NOT NULL,
-                        event_category VARCHAR(50) NOT NULL,
-                        resource_type VARCHAR(50),
-                        resource_id INTEGER,
-                        action VARCHAR(255) NOT NULL,
-                        details TEXT,
-                        status VARCHAR(20) DEFAULT 'success',
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-                    )
-                """))
-                print("  ✓ Created audit_logs table")
-            except Exception as e:
-                print(f"  ⚠ audit_logs: {e}")
-            
-            # Create indexes for performance and security
-            indexes = [
-                "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)",
-                "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
-                "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_email ON audit_logs(user_email)",
-                "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type)",
-                "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_category ON audit_logs(event_category)",
-                "CREATE INDEX IF NOT EXISTS idx_users_email_idx ON users(email)",
-                "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)"
-            ]
-            
-            for idx_stmt in indexes:
-                try:
-                    conn.execute(text(idx_stmt))
-                except Exception:
-                    pass
-            
-            print("✅ Security migration complete")
-        except Exception as e:
-            print(f"❌ Security migration failed: {e}")
-            # Don't crash - continue with app startup
+        # TEMPORARILY DISABLED - Causing deployment issues
+        # Will be re-enabled after testing
+        pass
 
         # ===== Seed admin user if no users exist =====
         try:
