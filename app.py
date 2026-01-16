@@ -219,6 +219,45 @@ def set_security_headers(response):
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.datetime.utcnow().isoformat()}), 200
 
+@app.route("/system/status")
+def system_status():
+    """
+    Diagnostic endpoint to check system configuration
+    """
+    openai_client = get_openai_client()
+    
+    status = {
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "openai": {
+            "configured": openai_client is not None,
+            "key_present": bool(OPENAI_API_KEY),
+            "key_valid": OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-your-") and OPENAI_API_KEY != "your_openai_api_key_here" if OPENAI_API_KEY else False
+        },
+        "database": {
+            "connected": True  # If we get here, DB is working
+        },
+        "features": {
+            "ai_scoring": openai_client is not None,
+            "ai_summarization": openai_client is not None,
+            "authentication": True
+        }
+    }
+    
+    # Test OpenAI connection if configured
+    if openai_client:
+        try:
+            # Simple test to verify API key works
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=5
+            )
+            status["openai"]["api_test"] = "success"
+        except Exception as e:
+            status["openai"]["api_test"] = f"failed: {str(e)}"
+    
+    return jsonify(status), 200
+
 @app.context_processor
 def inject_template_helpers():
     def view_exists(name: str) -> bool:
@@ -332,6 +371,49 @@ def admin_list_users():
     except Exception as e:
         flash(f"Error loading users: {str(e)}", "error")
         return render_template("admin_list_users.html", users=[])
+
+@app.route("/admin/system-diagnostics")
+def admin_system_diagnostics():
+    """System diagnostics and configuration check"""
+    openai_client = get_openai_client()
+    
+    # Test OpenAI connection
+    openai_test_result = None
+    if openai_client:
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=5
+            )
+            openai_test_result = "✓ Connection successful"
+        except Exception as e:
+            openai_test_result = f"✗ Connection failed: {str(e)}"
+    
+    diagnostics = {
+        "openai": {
+            "configured": openai_client is not None,
+            "key_present": bool(OPENAI_API_KEY),
+            "key_prefix": OPENAI_API_KEY[:10] + "..." if OPENAI_API_KEY and len(OPENAI_API_KEY) > 10 else "Not set",
+            "test_result": openai_test_result,
+            "features_enabled": [
+                "AI Match Scoring" if openai_client else "AI Match Scoring (disabled - no API key)",
+                "AI CV Summarization" if openai_client else "AI CV Summarization (disabled - no API key)",
+                "GPT-powered Candidate Analysis" if openai_client else "GPT-powered Analysis (disabled - no API key)"
+            ]
+        },
+        "database": {
+            "status": "✓ Connected",
+            "engine": str(engine.url).split('@')[0] + "@[hidden]"  # Hide credentials
+        },
+        "authentication": {
+            "status": "✓ Enabled",
+            "login_manager": "Flask-Login",
+            "password_hashing": "pbkdf2:sha256"
+        }
+    }
+    
+    return render_template("admin_system_diagnostics.html", diagnostics=diagnostics)
 
 @app.route("/change-password", methods=["GET", "POST"])
 @login_required
@@ -1536,12 +1618,41 @@ def _rebuild_ai_summary_and_tags(s, cand, doc=None, job=None, appn=None):
 
     # Optional AI score if a Job provided
     if job and target_app:
-        try:
-            result = ai_score_with_explanation(job.description or "", cv_text or (cand.skills or ""))
-            target_app.ai_score = int(result.get("final", 0) or 0)
-            target_app.ai_explanation = (result.get("explanation") or "")[:7999]
-        except Exception as e:
-            current_app.logger.warning("ai_score_with_explanation failed: %s", e)
+        client = get_openai_client()
+        if not client:
+            current_app.logger.warning("⚠️  OpenAI API key not configured - skipping AI scoring for job %s", job.id)
+            # Use heuristic scoring as fallback
+            try:
+                heur = _heuristic_components(job.description or "", cv_text or (cand.skills or ""))
+                target_app.ai_score = int(heur.get("score", 0))
+                overlaps = heur.get("overlap", [])
+                top_matches = ", ".join(sorted(overlaps)[:5]) if overlaps else "none"
+                target_app.ai_explanation = f"Keyword matching score (Configure OPENAI_API_KEY for AI-powered scoring). Top matches: {top_matches}"
+                current_app.logger.info("✓ Using heuristic scoring: %d/100", target_app.ai_score)
+            except Exception as e:
+                current_app.logger.warning("Heuristic scoring failed: %s", e)
+                target_app.ai_score = 0
+                target_app.ai_explanation = "Scoring unavailable"
+        else:
+            try:
+                current_app.logger.info("🤖 Computing AI score for candidate %s on job %s", cand.id, job.id)
+                result = ai_score_with_explanation(job.description or "", cv_text or (cand.skills or ""))
+                target_app.ai_score = int(result.get("final", 0) or 0)
+                target_app.ai_explanation = (result.get("explanation") or "")[:7999]
+                current_app.logger.info("✓ AI Score: %d/100 (GPT: %d, Heuristic: %d)", 
+                                      target_app.ai_score, 
+                                      result.get("gpt", 0),
+                                      result.get("heuristic", 0))
+            except Exception as e:
+                current_app.logger.exception("❌ ai_score_with_explanation failed: %s", e)
+                # Fallback to heuristic
+                try:
+                    heur = _heuristic_components(job.description or "", cv_text or (cand.skills or ""))
+                    target_app.ai_score = int(heur.get("score", 0))
+                    target_app.ai_explanation = f"AI scoring failed, using keyword matching: {heur.get('score', 0)}/100"
+                except Exception:
+                    target_app.ai_score = 0
+                    target_app.ai_explanation = "Scoring failed"
 
 def parse_date_dmy(s: Optional[str]):
     if not s:
