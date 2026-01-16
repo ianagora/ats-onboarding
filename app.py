@@ -304,6 +304,37 @@ def db_schema_diagnostic():
             "type": type(e).__name__
         }), 500
 
+@app.route("/system/list-users")
+def list_users_diagnostic():
+    """
+    PUBLIC diagnostic endpoint to list user emails
+    THIS WILL BE REMOVED AFTER DEBUGGING
+    """
+    try:
+        from sqlalchemy import text
+        with Session(engine) as s:
+            result = s.execute(text("SELECT id, name, email FROM users ORDER BY id"))
+            users = []
+            for row in result:
+                users.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "email": row[2]
+                })
+            
+            return jsonify({
+                "users": users,
+                "count": len(users),
+                "note": "This diagnostic endpoint will be removed after fixing login"
+            }), 200
+            
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "type": type(e).__name__
+        }), 500
+
+
 @app.context_processor
 def inject_template_helpers():
     def view_exists(name: str) -> bool:
