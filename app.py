@@ -742,14 +742,15 @@ class User(Base, UserMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(200), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    # Backward compatible: support both 'password' and 'password_hash' columns
+    password_hash = Column(String(255), name='password', nullable=False)
     name = Column(String(200), nullable=False)
     role = Column(String(50), default="employee")  # employee, admin, super_admin
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime, nullable=True)
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, nullable=True)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
