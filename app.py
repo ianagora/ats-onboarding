@@ -263,76 +263,12 @@ def system_status():
     
     return jsonify(status), 200
 
-@app.route("/system/db-schema")
-def db_schema_diagnostic():
-    """
-    PUBLIC diagnostic endpoint to check database schema
-    THIS WILL BE REMOVED AFTER DEBUGGING
-    """
-    try:
-        from sqlalchemy import text
-        with Session(engine) as s:
-            # Check what columns exist in users table
-            result = s.execute(text("""
-                SELECT column_name, data_type, is_nullable
-                FROM information_schema.columns 
-                WHERE table_name = 'users' 
-                ORDER BY ordinal_position
-            """))
-            
-            columns = []
-            password_columns = []
-            for row in result:
-                col_info = {
-                    "name": row[0],
-                    "type": row[1],
-                    "nullable": row[2]
-                }
-                columns.append(col_info)
-                if 'password' in row[0].lower():
-                    password_columns.append(row[0])
-            
-            return jsonify({
-                "users_table_columns": columns,
-                "password_related_columns": password_columns,
-                "note": "This diagnostic endpoint will be removed after fixing the schema issue"
-            }), 200
-            
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
 
-@app.route("/system/list-users")
-def list_users_diagnostic():
-    """
-    PUBLIC diagnostic endpoint to list user emails
-    THIS WILL BE REMOVED AFTER DEBUGGING
-    """
-    try:
-        from sqlalchemy import text
-        with Session(engine) as s:
-            result = s.execute(text("SELECT id, name, email FROM users ORDER BY id"))
-            users = []
-            for row in result:
-                users.append({
-                    "id": row[0],
-                    "name": row[1],
-                    "email": row[2]
-                })
-            
-            return jsonify({
-                "users": users,
-                "count": len(users),
-                "note": "This diagnostic endpoint will be removed after fixing login"
-            }), 200
-            
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+# SECURITY: Diagnostic endpoints removed to prevent information disclosure
+# These were temporary debugging endpoints that exposed:
+# - Database schema structure (/system/db-schema)
+# - User email addresses (/system/list-users)
+# Removed for CREST compliance
 
 
 @app.context_processor
