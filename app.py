@@ -453,7 +453,7 @@ def run_migration():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Staff login page - simplified for reliability"""
+    """Staff login page with full security features"""
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
@@ -471,15 +471,74 @@ def login():
                 user = s.scalar(select(User).where(User.email == email))
                 
                 if not user:
+                    # Audit log failed attempt
+                    try:
+                        log_audit_event('login', 'auth', f'Failed login attempt for {email}', 
+                                      details={'reason': 'user_not_found'}, status='failure')
+                    except:
+                        pass
                     flash("Invalid email or password", "error")
                     return render_template("login.html")
+                
+                # Check if account is locked
+                try:
+                    if user.is_locked():
+                        remaining_time = user.locked_until - datetime.datetime.utcnow()
+                        remaining_minutes = int(remaining_time.total_seconds() / 60) + 1
+                        try:
+                            log_audit_event('login', 'auth', 
+                                          f'Locked account login attempt for {email}',
+                                          details={'remaining_minutes': remaining_minutes},
+                                          status='failure')
+                        except:
+                            pass
+                        flash(f"Account locked. Try again in {remaining_minutes} minutes.", "error")
+                        return render_template("login.html")
+                except:
+                    pass  # If lockout check fails, continue with login
                 
                 # Verify password
                 if not check_password_hash(user.password_hash, password):
-                    flash("Invalid email or password", "error")
+                    # Failed login - increment attempts
+                    try:
+                        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+                        
+                        if user.failed_login_attempts >= 5:
+                            user.locked_until = datetime.datetime.utcnow() + timedelta(minutes=30)
+                            s.commit()
+                            try:
+                                log_audit_event('login', 'auth', 
+                                              f'Account locked for {email} after 5 failed attempts',
+                                              status='warning')
+                            except:
+                                pass
+                            flash("Too many failed attempts. Account locked for 30 minutes.", "error")
+                        else:
+                            s.commit()
+                            remaining = 5 - user.failed_login_attempts
+                            try:
+                                log_audit_event('login', 'auth', 
+                                              f'Failed login attempt for {email}',
+                                              details={'attempts': user.failed_login_attempts, 'remaining': remaining},
+                                              status='failure')
+                            except:
+                                pass
+                            flash(f"Invalid email or password. {remaining} attempts remaining.", "error")
+                    except:
+                        # If security features fail, show generic message
+                        flash("Invalid email or password", "error")
                     return render_template("login.html")
                 
-                # Password is correct - detach from session before login
+                # Password is correct - reset security counters
+                try:
+                    user.failed_login_attempts = 0
+                    user.locked_until = None
+                    user.last_login = datetime.datetime.utcnow()
+                    s.commit()
+                except:
+                    pass  # Continue even if security updates fail
+                
+                # Detach from session before login
                 s.expunge(user)
             
             # Login the user (outside the DB session)
@@ -489,6 +548,12 @@ def login():
             else:
                 login_user(user, remember=False)
                 session.permanent = True
+            
+            # Audit log successful login
+            try:
+                log_audit_event('login', 'auth', f'Successful login for {email}', status='success')
+            except:
+                pass
             
             # Redirect
             next_page = request.args.get('next')
