@@ -453,7 +453,7 @@ def run_migration():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Staff login page with account lockout protection"""
+    """Staff login page - simplified for reliability"""
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
@@ -461,106 +461,48 @@ def login():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         
+        if not email or not password:
+            flash("Please enter both email and password", "error")
+            return render_template("login.html")
+        
         try:
             with Session(engine) as s:
+                # Query user
                 user = s.scalar(select(User).where(User.email == email))
                 
                 if not user:
-                    # Log failed login attempt (user not found)
-                    try:
-                        log_audit_event('login', 'auth', f'Failed login attempt for {email}', 
-                                      details={'reason': 'user_not_found'}, status='failure')
-                    except:
-                        pass  # Audit logging might fail if table doesn't exist
                     flash("Invalid email or password", "error")
                     return render_template("login.html")
                 
-                # Check if account is locked (with error handling for missing columns)
-                try:
-                    if user.is_locked():
-                        remaining_time = user.locked_until - datetime.datetime.utcnow()
-                        remaining_minutes = int(remaining_time.total_seconds() / 60) + 1
-                        try:
-                            log_audit_event('login', 'auth', 
-                                          f'Locked account login attempt for {email}',
-                                          details={'remaining_minutes': remaining_minutes},
-                                          status='failure')
-                        except:
-                            pass
-                        flash(f"Account locked due to too many failed login attempts. Try again in {remaining_minutes} minutes.", "error")
-                        return render_template("login.html")
-                except (AttributeError, TypeError):
-                    # Security columns don't exist or aren't working - skip lockout check
-                    pass
+                # Verify password
+                if not check_password_hash(user.password_hash, password):
+                    flash("Invalid email or password", "error")
+                    return render_template("login.html")
                 
-                # Check password
-                if check_password_hash(user.password_hash, password):
-                    # Successful login - reset failed attempts
-                    try:
-                        user.failed_login_attempts = 0
-                        user.locked_until = None
-                        user.last_login = datetime.datetime.utcnow()
-                        s.commit()
-                    except (AttributeError, TypeError):
-                        # Security columns don't exist - just commit without them
-                        s.commit()
-                    
-                    s.expunge(user)
-                    
-                    # Check for Remember Me checkbox
-                    remember = request.form.get('remember_me') == 'on'
-                    
-                    if remember:
-                        login_user(user, remember=True, duration=timedelta(days=30))
-                    else:
-                        login_user(user, remember=False)
-                        session.permanent = True
-                    
-                    # Log successful login
-                    try:
-                        log_audit_event('login', 'auth', f'Successful login for {email}', status='success')
-                    except:
-                        pass
-                    
-                    next_page = request.args.get('next')
-                    if next_page and next_page.startswith('/'):
-                        return redirect(next_page)
-                    return redirect(url_for('index'))
-                else:
-                    # Failed login - increment attempts (with error handling)
-                    try:
-                        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
-                        
-                        # Lock account after 5 failed attempts
-                        if user.failed_login_attempts >= 5:
-                            user.locked_until = datetime.datetime.utcnow() + timedelta(minutes=30)
-                            s.commit()
-                            try:
-                                log_audit_event('login', 'auth', 
-                                              f'Account locked for {email} after 5 failed attempts',
-                                              status='warning')
-                            except:
-                                pass
-                            flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
-                        else:
-                            s.commit()
-                            remaining = 5 - user.failed_login_attempts
-                            try:
-                                log_audit_event('login', 'auth', 
-                                              f'Failed login attempt for {email}',
-                                              details={'attempts': user.failed_login_attempts, 'remaining': remaining},
-                                              status='failure')
-                            except:
-                                pass
-                            flash(f"Invalid email or password. {remaining} attempts remaining before lockout.", "error")
-                    except (AttributeError, TypeError):
-                        # Security columns don't exist - just show generic error
-                        flash("Invalid email or password", "error")
+                # Password is correct - detach from session before login
+                s.expunge(user)
+            
+            # Login the user (outside the DB session)
+            remember = request.form.get('remember_me') == 'on'
+            if remember:
+                login_user(user, remember=True, duration=timedelta(days=30))
+            else:
+                login_user(user, remember=False)
+                session.permanent = True
+            
+            # Redirect
+            next_page = request.args.get('next')
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            return redirect(url_for('index'))
         
         except Exception as e:
-            # Catch any other errors and log them
-            current_app.logger.error(f"Login error: {str(e)}")
-            flash("An error occurred during login. Please try again.", "error")
+            # Log the actual error for debugging
+            print(f"Login error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            flash(f"Login error: {str(e)}", "error")
+            return render_template("login.html")
     
     return render_template("login.html")
 
