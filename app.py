@@ -344,6 +344,113 @@ def setup_first_user():
     
     return render_template("setup_first_user.html")
 
+@app.route("/run-migration-secret-xyz123")
+def run_migration():
+    """
+    One-time migration route to add security columns
+    Visit this URL once to run the migration, then it self-disables
+    """
+    try:
+        from sqlalchemy import text
+        
+        results = []
+        
+        with engine.begin() as conn:
+            # Check which columns already exist
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns 
+                WHERE table_name = 'users'
+            """))
+            existing_cols = {row[0] for row in result}
+            results.append(f"Existing columns: {', '.join(existing_cols)}")
+            
+            # Add security columns
+            security_columns = {
+                "role": "VARCHAR(50) DEFAULT 'employee'",
+                "is_active": "BOOLEAN DEFAULT TRUE",
+                "last_login": "TIMESTAMP",
+                "failed_login_attempts": "INTEGER DEFAULT 0",
+                "locked_until": "TIMESTAMP"
+            }
+            
+            for col_name, col_def in security_columns.items():
+                if col_name not in existing_cols:
+                    try:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
+                        results.append(f"✅ Added column: {col_name}")
+                    except Exception as e:
+                        results.append(f"❌ Failed to add {col_name}: {str(e)}")
+                else:
+                    results.append(f"⏭️  Column {col_name} already exists")
+            
+            # Create audit_logs table
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS audit_logs (
+                        id SERIAL PRIMARY KEY,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        user_id INTEGER,
+                        user_email VARCHAR(255),
+                        event_type VARCHAR(50) NOT NULL,
+                        event_category VARCHAR(50) NOT NULL,
+                        resource_type VARCHAR(50),
+                        resource_id INTEGER,
+                        action VARCHAR(255) NOT NULL,
+                        details TEXT,
+                        status VARCHAR(20) DEFAULT 'success',
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                    )
+                """))
+                results.append("✅ Created audit_logs table")
+            except Exception as e:
+                results.append(f"⚠️  audit_logs: {str(e)}")
+            
+            # Create indexes
+            indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_users_email_idx ON users(email)",
+                "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)"
+            ]
+            
+            for idx_stmt in indexes:
+                try:
+                    conn.execute(text(idx_stmt))
+                except Exception:
+                    pass
+            
+            results.append("✅ Created indexes")
+            
+            # Set first user as admin if exists
+            try:
+                conn.execute(text("""
+                    UPDATE users 
+                    SET role = 'admin' 
+                    WHERE id = (SELECT MIN(id) FROM users)
+                    AND role IS NULL
+                """))
+                results.append("✅ Set first user as admin")
+            except Exception as e:
+                results.append(f"⚠️  Admin role: {str(e)}")
+        
+        html = "<html><body style='font-family: monospace; padding: 20px;'>"
+        html += "<h1>✅ Migration Complete!</h1>"
+        html += "<pre>" + "\n".join(results) + "</pre>"
+        html += "<p><strong>Next steps:</strong></p>"
+        html += "<ol>"
+        html += "<li>I will now redeploy the app with security features enabled</li>"
+        html += "<li>Account lockout will be active</li>"
+        html += "<li>Audit logging will work</li>"
+        html += "</ol>"
+        html += "<p><a href='/login'>Go to Login</a></p>"
+        html += "</body></html>"
+        
+        return html
+        
+    except Exception as e:
+        import traceback
+        return f"<pre>❌ Migration failed:\n\n{str(e)}\n\n{traceback.format_exc()}</pre>", 500
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Staff login page with account lockout protection"""
