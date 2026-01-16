@@ -359,6 +359,55 @@ def load_user(user_id):
 
 # ========== Authentication Routes ==========
 
+@app.route("/setup-first-user", methods=["GET", "POST"])
+def setup_first_user():
+    """
+    One-time setup route to create the first admin user
+    Only works if NO users exist in the database
+    """
+    with Session(engine) as s:
+        # Check if any users exist
+        user_count = s.execute(select(func.count(User.id))).scalar()
+        
+        if user_count > 0:
+            flash("Setup already completed. Users already exist.", "error")
+            return redirect(url_for('login'))
+    
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        
+        if not name or not email or not password:
+            flash("All fields are required", "error")
+            return render_template("setup_first_user.html")
+        
+        # Validate password length
+        if len(password) < 8:
+            flash("Password must be at least 8 characters", "error")
+            return render_template("setup_first_user.html")
+        
+        with Session(engine) as s:
+            # Double-check no users exist
+            user_count = s.execute(select(func.count(User.id))).scalar()
+            if user_count > 0:
+                flash("Setup already completed", "error")
+                return redirect(url_for('login'))
+            
+            # Create first user
+            new_user = User(
+                name=name,
+                email=email,
+                password_hash=generate_password_hash(password, method='pbkdf2:sha256')
+            )
+            s.add(new_user)
+            s.commit()
+            
+            flash(f"Account created successfully! You can now login.", "success")
+            return redirect(url_for('login'))
+    
+    return render_template("setup_first_user.html")
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Staff login page with account lockout protection"""
