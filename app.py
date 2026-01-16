@@ -317,6 +317,7 @@ def logout():
     return redirect(url_for('login'))
 
 # ========== TEMPORARY: Admin User Management ==========
+@login_required
 @app.route("/admin/create-user", methods=["GET", "POST"])
 def admin_create_user():
     """Temporary page to manually create admin user"""
@@ -358,6 +359,7 @@ def admin_create_user():
     
     return render_template("admin_create_user.html")
 
+@login_required
 @app.route("/admin/list-users")
 def admin_list_users():
     """Temporary page to list all users"""
@@ -372,6 +374,7 @@ def admin_list_users():
         flash(f"Error loading users: {str(e)}", "error")
         return render_template("admin_list_users.html", users=[])
 
+@login_required
 @app.route("/admin/system-diagnostics")
 def admin_system_diagnostics():
     """System diagnostics and configuration check"""
@@ -415,6 +418,7 @@ def admin_system_diagnostics():
     
     return render_template("admin_system_diagnostics.html", diagnostics=diagnostics)
 
+@login_required
 @app.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
@@ -2278,6 +2282,7 @@ def slugify_role(name: str) -> str:
 # -------------- Routes --------------
 from sqlalchemy.orm import selectinload  # make sure this import exists
 
+@login_required
 @app.route("/")
 # @login_required  # TEMPORARILY DISABLED FOR TROUBLESHOOTING
 def index():
@@ -2443,6 +2448,7 @@ def index():
         active_vacancies=active_vacancies,
     )
 
+@login_required
 @app.route("/action/candidate/regenerate_summary", methods=["POST"])
 def candidate_regenerate_summary():
     """
@@ -2829,6 +2835,7 @@ def action_score_candidate(cand_id: int):
     return redirect(url_for("candidate_profile", cand_id=cand_id, job_id=job_id))
 
 # ---- Opportunities: list + create ----
+@login_required
 @app.route("/opportunities", methods=["GET", "POST"])
 def opportunities_():
     with Session(engine) as s:
@@ -2920,6 +2927,7 @@ def opportunities_():
         items=rows,
     )
 
+@login_required
 @app.route("/admin/roles", methods=["GET", "POST"])
 def admin_roles():
     form = RoleTypeForm()
@@ -2943,6 +2951,7 @@ def admin_roles():
 
     return render_template("admin_roles.html", form=form, roles=roles)
 
+@login_required
 @app.route("/sumsub/access_token/<external_user_id>", methods=["POST", "GET"])
 def sumsub_access_token(external_user_id: str):
     """
@@ -2973,6 +2982,7 @@ def sumsub_access_token(external_user_id: str):
         current_app.logger.exception("Sumsub access token failed")
         return jsonify({"error": "sumsub_access_token_failed", "detail": str(e)}), 500
 
+@login_required
 @app.route("/sumsub/create_applicant", methods=["POST"])
 def sumsub_create_applicant():
     """
@@ -3104,6 +3114,7 @@ def sumsub_create_applicant():
 #     routes.sort(key=lambda x: x["rule"])
     return jsonify({"routes": routes})
 
+@login_required
 @app.route("/sumsub/levels", methods=["GET"])
 def sumsub_list_levels():
     """
@@ -3131,6 +3142,7 @@ def sumsub_list_levels():
         return jsonify({"error": "sumsub_list_levels_failed", "detail": str(e)}), 500
 
 # --- Sumsub WebSDK launcher page ---
+@login_required
 @app.route("/sumsub/start/<external_user_id>", methods=["GET"])
 def sumsub_start(external_user_id: str):
     """
@@ -3163,6 +3175,7 @@ def sumsub_start(external_user_id: str):
         sumsub_label=label,
     )
 
+@login_required
 @app.route("/sumsub/applicant/<applicant_id>", methods=["GET"])
 def sumsub_get_applicant(applicant_id: str):
     """Fetch applicant object from Sumsub."""
@@ -3181,6 +3194,7 @@ def sumsub_get_applicant(applicant_id: str):
         return jsonify({"error": "sumsub_get_applicant_failed", "detail": str(e)}), 500
 
 # --- Convert Opportunity → Engagement ---
+@login_required
 @app.route("/opportunities/<int:opp_id>/convert", methods=["POST"], endpoint="opportunity_convert_v2")
 def opportunity_convert_v2(opp_id):
     with Session(engine) as s:
@@ -3204,6 +3218,7 @@ def opportunity_convert_v2(opp_id):
         flash(f"Engagement {e.ref or e.id} created.", "success")
         return redirect(url_for("engagement_dashboard", eng_id=e.id))
 
+@login_required
 @app.route("/opportunity/<int:opp_id>/convert_to_engagement", methods=["POST"])
 def opportunity_convert_to_engagement(opp_id):
     with Session(engine) as s:
@@ -3219,6 +3234,7 @@ def opportunity_convert_to_engagement(opp_id):
         flash(f"Engagement {eng.ref} created.", "success")
         return redirect(url_for("engagement_dashboard", eng_id=eng.id))
 
+@login_required
 @app.route("/admin/opportunities/backfill_engagements", methods=["POST"])
 def backfill_engagements_for_won():
     created = 0
@@ -3234,6 +3250,7 @@ def backfill_engagements_for_won():
     return redirect(url_for("opportunities_"))
 
 # ---- Opportunities: edit ----
+@login_required
 @app.route("/opportunity/<int:opp_id>", methods=["GET", "POST"])
 def opportunity_edit(opp_id):
     # Load the opportunity row
@@ -3355,6 +3372,7 @@ def action_onboarding_email(app_id):
     flash("Onboarding email sent", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/kanban")
 def kanban():
     columns = ["New","Screening","Interview","Offer","Onboarding","Hired","Rejected"]
@@ -3367,6 +3385,7 @@ def kanban():
                                ).all() for col in columns}
     return render_template("kanban.html", columns=columns, data=data)
 
+@login_required
 @app.route("/kanban/move", methods=["POST"])
 def kanban_move():
     payload = request.json or {}
@@ -3380,6 +3399,7 @@ def kanban_move():
         s.commit()
     return jsonify({"ok": True})
 
+@login_required
 @app.route("/engagements/create", methods=["GET", "POST"])
 def create_engagement():
     form = EngagementForm()
@@ -3404,6 +3424,7 @@ def create_engagement():
         return redirect(url_for("engagements"))
     return render_template("create_engagement.html", form=form)
 
+@login_required
 @app.route("/engagements", methods=["GET"])
 def engagements():
     # Get filter parameters with safe defaults
@@ -3660,6 +3681,7 @@ def jobs():
         locked_engagement=locked_eng,  # pass for UX banner/disable
     )
 
+@login_required
 @app.route("/job/<token>")
 def public_job(token):
     with Session(engine) as s:
@@ -3668,6 +3690,7 @@ def public_job(token):
             abort(404)
     return render_template("public_job.html", job=job)
 
+@login_required
 @app.route("/job/new", methods=["GET", "POST"])
 def job_new():
     """Create a new job post."""
@@ -3698,6 +3721,7 @@ def job_new():
         return render_template("job_form.html", job=None, roles=roles, mode="create")
 
 
+@login_required
 @app.route("/job/<int:job_id>/edit", methods=["GET", "POST"])
 def job_edit(job_id):
     """Edit an existing job post."""
@@ -3815,6 +3839,7 @@ def apply(token):
 
     return render_template("apply.html", form=form, job=job)
 
+@login_required
 @app.route("/my/timesheets", methods=["GET", "POST"])
 @worker_required
 def my_timesheets():
@@ -3869,6 +3894,7 @@ def my_timesheets():
 
     return render_template("timesheets_portal.html", form=form, items=mine, week=(start, end))
 
+@login_required
 @app.route("/action/candidate/delete", methods=["POST"])
 def candidate_delete_action():
     cand_id = int((request.form.get("candidate_id") or "0") or 0)
@@ -3903,6 +3929,7 @@ def candidate_delete_action():
     flash("Candidate deleted.", "success")
     return redirect(request.referrer or url_for("resource_pool"))
 
+@login_required
 @app.route("/application/<int:app_id>", methods=["GET","POST"])
 def application_detail(app_id):
     interview_form = InterviewForm()
@@ -4011,6 +4038,7 @@ def application_detail(app_id):
         actions_disabled=actions_disabled,
     )
 
+@login_required
 @app.route("/action/score/<int:app_id>", methods=["POST"])
 def action_score(app_id):
     with Session(engine) as s:
@@ -4031,6 +4059,7 @@ def action_score(app_id):
     flash("AI score updated", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/summarise/<int:app_id>", methods=["POST"])
 def action_summarise(app_id):
     with Session(engine) as s:
@@ -4052,6 +4081,7 @@ def action_summarise(app_id):
 def trustid_headers():
     return {"Authorization": f"Bearer {TRUSTID_API_KEY}", "Content-Type": "application/json"}
 
+@login_required
 @app.route("/action/trustid/<int:app_id>", methods=["POST"])
 def action_trustid(app_id):
     do_rtw = bool(request.form.get("rtw"))
@@ -4084,6 +4114,7 @@ def action_trustid(app_id):
     flash("TrustID checks initiated", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/webhook/trustid", methods=["POST"])
 def webhook_trustid():
     """
@@ -4161,6 +4192,7 @@ def webhook_trustid():
     return jsonify({"ok": True})
 
 # -------- Interview scheduling (ICS) --------
+@login_required
 @app.route("/action/schedule_interview/<int:app_id>", methods=["POST"])
 def action_schedule_interview(app_id):
     form_dt = request.form.get("scheduled_at")
@@ -4233,6 +4265,7 @@ def action_schedule_interview(app_id):
     flash("Interview scheduled and invites sent", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/mark_interview_completed/<int:app_id>", methods=["POST"])
 def action_mark_interview_completed(app_id):
     with Session(engine) as s:
@@ -4244,6 +4277,7 @@ def action_mark_interview_completed(app_id):
     flash("Interview marked as completed", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/complete_interview/<int:app_id>", methods=["POST"])
 def action_complete_interview(app_id):
     with Session(engine) as s:
@@ -4256,6 +4290,7 @@ def action_complete_interview(app_id):
     flash("Interview marked as completed.", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/skip_interview/<int:app_id>", methods=["POST"])
 def action_skip_interview(app_id):
     """Skip interview and mark as completed without scheduling"""
@@ -4271,6 +4306,7 @@ def action_skip_interview(app_id):
     flash("Interview skipped. Application moved to next stage.", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/save_interview_notes/<int:app_id>", methods=["POST"])
 def action_save_interview_notes(app_id):
     notes = request.form.get("interview_notes", "").strip()
@@ -4283,6 +4319,7 @@ def action_save_interview_notes(app_id):
     flash("Interview notes saved.", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/save_assessor_notes/<int:app_id>", methods=["POST"])
 def action_save_assessor_notes(app_id):
     notes = request.form.get("assessor_notes", "").strip()
@@ -4355,6 +4392,7 @@ def poll_esign_docusign(request_id: str):
     status_map = {"sent":"Sent","completed":"Signed","declined":"Declined","voided":"Error"}
     return status_map.get((res.status or "").lower(), res.status or "Unknown")
 
+@login_required
 @app.route("/action/esign/<int:app_id>", methods=["POST"])
 def action_esign(app_id):
     with Session(engine) as s:
@@ -4388,6 +4426,7 @@ def action_esign(app_id):
     flash("Contract sent for e-signature", "success")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/action/esign_status/<int:app_id>", methods=["POST"])
 def action_esign_status(app_id):
     with Session(engine) as s:
@@ -4413,6 +4452,7 @@ def action_esign_status(app_id):
     flash(f"E-sign status: {status}", "info")
     return redirect(url_for("application_detail", app_id=app_id))
 
+@login_required
 @app.route("/webhook/esign", methods=["POST"])
 def webhook_esign():
     payload = request.json or {}
@@ -4422,6 +4462,7 @@ def webhook_esign():
     return jsonify({"ok": True})
 
 # ---- Request updated CV ----
+@login_required
 @app.route("/action/request_updated_cv/<int:app_id>", methods=["POST"])
 def action_request_updated_cv(app_id):
     with Session(engine) as s:
@@ -4511,6 +4552,7 @@ def candidate_profile(cand_id: int):
     )
 
 # -------- Engagement Dashboard --------
+@login_required
 @app.route("/engagement/<int:eng_id>/dashboard")
 def engagement_dashboard(eng_id):
     UNASSIGNED = "Unassigned"
@@ -4836,6 +4878,7 @@ def build_plan_form(initial_by_role: Dict[str, int]):
         setattr(_PlanForm, fname, IntegerField(role, default=int(initial_by_role.get(role, 0) or 0)))
     return _PlanForm
 
+@login_required
 @app.route("/shortlist/add", methods=["POST"])
 def shortlist_add():
     job_id = int(request.form.get("job_id", "0") or 0)
@@ -4869,6 +4912,7 @@ def shortlist_add():
 
     return redirect(url_for("resource_pool", job_id=job_id))
 
+@login_required
 @app.route("/shortlist/remove", methods=["POST"])
 def shortlist_remove():
     job_id = int(request.form.get("job_id", "0") or 0)
@@ -4886,6 +4930,7 @@ def shortlist_remove():
             flash("Removed from shortlist.", "success")
     return redirect(url_for("resource_pool", job_id=job_id))
 
+@login_required
 @app.route("/engagement/<int:eng_id>/list/<section>")
 def engagement_list(eng_id: int, section: str):
     # Simple shim so templates like url_for('engagement_list', ...) work.
@@ -4894,6 +4939,7 @@ def engagement_list(eng_id: int, section: str):
     return redirect(url_for("engagement_dashboard", eng_id=eng_id, _anchor=section))
 
 # ---- Withdraw a job (and notify applicants not yet in vetting) ----
+@login_required
 @app.route("/engagement/<int:eng_id>/jobs/<int:job_id>/withdraw", methods=["POST"])
 def engagement_jobs_withdraw(eng_id: int, job_id: int):
     with Session(engine) as s:
@@ -4945,6 +4991,7 @@ def engagement_jobs_withdraw(eng_id: int, job_id: int):
 
     return redirect(url_for("engagement_job_detail", eng_id=eng_id, job_id=job_id))
 
+@login_required
 @app.route("/engagement/<int:eng_id>/plan", methods=["GET", "POST"])
 def engagement_plan(eng_id):
     with Session(engine) as s:
@@ -5037,6 +5084,7 @@ def engagement_plan(eng_id):
     )
 
 # ---- Engagement-scoped Job detail ----
+@login_required
 @app.route("/engagement/<int:eng_id>/jobs/<int:job_id>")
 def engagement_job_detail(eng_id: int, job_id: int):
     with Session(engine) as s:
@@ -5152,6 +5200,7 @@ def _render_applications_table(
     return render_template(tpl, q=q, job_id=job_id, eng_id=eng_id,
                            items=items, pagination=pagination, engagement=engagement)
 
+@login_required
 @app.route("/applications")
 def applications():
     q        = (request.args.get("q") or "").strip()
@@ -5179,6 +5228,7 @@ from sqlalchemy import or_, false
 # from your_module import session, engine, Application, Candidate, Job, Shortlist
 # Ensure the models below are imported from wherever you declare them.
 
+@login_required
 @app.route("/engagement/<int:eng_id>/applications")
 def applications_for_engagement(eng_id: int):
     q = (request.args.get("q") or "").strip()
@@ -5306,6 +5356,7 @@ def applications_for_engagement(eng_id: int):
         engagement_finished=False,
     )
 
+@login_required
 @app.route("/engagement/<int:eng_id>/financials")
 def engagement_financials(eng_id):
     with Session(engine) as s:
@@ -5343,6 +5394,7 @@ def engagement_financials(eng_id):
         timesheets=ts_rows,
     )
 
+@login_required
 @app.route("/resource-pool")
 def resource_pool():
     # Query params
@@ -5543,6 +5595,7 @@ def resource_pool():
 
 from flask import Response
 
+@login_required
 @app.route("/resource-pool.csv")
 def resource_pool_csv():
     q = (request.args.get("q") or "").strip()
@@ -5635,6 +5688,7 @@ def resource_pool_csv():
     )
 
 # -------- Taxonomy: view (read-only) --------
+@login_required
 @app.route("/taxonomy")
 def taxonomy():
     with Session(engine) as s:
@@ -5646,6 +5700,7 @@ def taxonomy():
     return render_template("taxonomy.html", roles=roles, subjects=subjects)
 
 # -------- Taxonomy: manage (add/edit/delete) --------
+@login_required
 @app.route("/taxonomy/manage", methods=["GET"])
 def taxonomy_manage():
     cat_form = TaxCategoryForm()
@@ -5664,6 +5719,7 @@ def taxonomy_manage():
                            tags_by_cat=tags_by_cat,
                            cat_form=cat_form, tag_form=tag_form)
 
+@login_required
 @app.route("/taxonomy/category/add", methods=["POST"])
 def taxonomy_category_add():
     form = TaxCategoryForm()
@@ -5676,6 +5732,7 @@ def taxonomy_category_add():
     flash("Category added.", "success")
     return redirect(url_for("taxonomy_manage"))
 
+@login_required
 @app.route("/taxonomy/category/<int:cat_id>/rename", methods=["POST"])
 def taxonomy_category_rename(cat_id):
     new_name = (request.form.get("name") or "").strip()
@@ -5691,6 +5748,7 @@ def taxonomy_category_rename(cat_id):
     flash("Category renamed.", "success")
     return redirect(url_for("taxonomy_manage"))
 
+@login_required
 @app.route("/taxonomy/category/<int:cat_id>/delete", methods=["POST"])
 def taxonomy_category_delete(cat_id):
     with Session(engine) as s:
@@ -5702,6 +5760,7 @@ def taxonomy_category_delete(cat_id):
     flash("Category deleted.", "success")
     return redirect(url_for("taxonomy_manage"))
 
+@login_required
 @app.route("/taxonomy/tag/add", methods=["POST"])
 def taxonomy_tag_add():
     form = TaxTagForm()
@@ -5729,6 +5788,7 @@ def taxonomy_tag_add():
     flash("Tag added.", "success")
     return redirect(url_for("taxonomy_manage"))
 
+@login_required
 @app.route("/taxonomy/tag/<int:tag_id>/delete", methods=["POST"])
 def taxonomy_tag_delete(tag_id):
     with Session(engine) as s:
@@ -5740,6 +5800,7 @@ def taxonomy_tag_delete(tag_id):
     flash("Tag deleted.", "success")
     return redirect(url_for("taxonomy_manage"))
 
+@login_required
 @app.route("/action/taxonomy/retag_all", methods=["POST"])
 def taxonomy_retag_all():
     """
@@ -5801,6 +5862,7 @@ def taxonomy_retag_all():
     return redirect(url_for("taxonomy"))
     
 
+@login_required
 @app.route("/action/taxonomy/retag_one/<int:cand_id>", methods=["POST"])
 def taxonomy_retag_one(cand_id):
     """Re-tag just one candidate (handy button next to a row)."""
@@ -6128,6 +6190,7 @@ def action_request_updated_cv_candidate(cand_id):
     flash("CV update request sent.", "success")
     return redirect(url_for("candidate_profile", cand_id=cand_id))
 
+@login_required
 @app.route("/configuration", methods=["GET"])
 def configuration():
     alias_form = RoleAliasForm()
@@ -6256,6 +6319,7 @@ def engagement_jobs(eng_id):
         ).all()
     return render_template("eng_jobs_list.html", engagement=eng, jobs=jobs)
 
+@login_required
 @app.route("/engagement/<int:eng_id>/jobs/create", methods=["GET","POST"])
 def engagement_jobs_create(eng_id):
     with Session(engine) as s:
@@ -6520,6 +6584,7 @@ def candidate_upload_cv(cand_id):
     return render_template("candidate_upload_cv.html", form=form, cand=cand)
 
 # OPTIONAL: simple worker signup (disable in prod or restrict to admins)
+@login_required
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     form = WorkerSignupForm()
@@ -6542,6 +6607,7 @@ def signup():
         return redirect(url_for("login"))
     return render_template("auth_signup.html", form=form)
 
+@login_required
 @app.route("/uploads/cvs/<path:fname>")
 def download_cv(fname):
     return send_from_directory(os.path.join(app.config["UPLOAD_FOLDER"], "cvs"), fname, as_attachment=True)
