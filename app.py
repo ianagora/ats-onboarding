@@ -6519,35 +6519,6 @@ def candidate_upload_cv(cand_id):
 
     return render_template("candidate_upload_cv.html", form=form, cand=cand)
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    form = WorkerLoginForm()
-    nxt = request.args.get("next") or url_for("index")
-    if form.validate_on_submit():
-        email = form.email.data.strip().lower()
-        pw = form.password.data
-        with Session(engine) as s:
-            row = s.execute(text("SELECT id, name, email, pw_hash FROM users WHERE lower(email)=:e"), {"e": email}).first()
-            if not row or not row[3] or not check_password_hash(row[3], pw):
-                flash("Invalid email or password.", "danger")
-                return render_template("auth_login.html", form=form, next=nxt)
-            class _Obj: pass
-            obj = _Obj(); obj.id, obj.name, obj.email = row[0], row[1], row[2]
-            login_user(WorkerUser(obj))
-        flash("Signed in.", "success")
-        return redirect(nxt)
-    return render_template("auth_login.html", form=form, next=nxt)
-
-@app.route("/logout")
-def logout():
-    if current_user.is_authenticated:
-        logout_user()
-    # also clear candidate session in case they shared a browser
-    session.pop("candidate_id", None)
-    session.pop("candidate_email", None)
-    flash("Signed out.", "info")
-    return redirect(url_for("index"))
-
 # OPTIONAL: simple worker signup (disable in prod or restrict to admins)
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
