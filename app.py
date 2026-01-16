@@ -263,6 +263,54 @@ def system_status():
     
     return jsonify(status), 200
 
+@app.route("/system/db-schema")
+def db_schema_diagnostic():
+    """
+    PUBLIC diagnostic endpoint to check database schema
+    THIS WILL BE REMOVED AFTER DEBUGGING
+    """
+    try:
+        from sqlalchemy import text
+        with Session(engine) as s:
+            # Check what columns exist in users table
+            result = s.execute(text("""
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns 
+                WHERE table_name = 'users' 
+                ORDER BY ordinal_position
+            """))
+            
+            columns = []
+            password_columns = []
+            for row in result:
+                col_info = {
+                    "name": row[0],
+                    "type": row[1],
+                    "nullable": row[2]
+                }
+                columns.append(col_info)
+                if 'password' in row[0].lower():
+                    password_columns.append(row[0])
+            
+            # Check if any admin users exist
+            admin_count_result = s.execute(text("""
+                SELECT COUNT(*) FROM users WHERE role IN ('admin', 'super_admin')
+            """))
+            admin_count = admin_count_result.scalar()
+            
+            return jsonify({
+                "users_table_columns": columns,
+                "password_related_columns": password_columns,
+                "admin_count": admin_count,
+                "note": "This diagnostic endpoint will be removed after fixing the schema issue"
+            }), 200
+            
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "type": type(e).__name__
+        }), 500
+
 @app.context_processor
 def inject_template_helpers():
     def view_exists(name: str) -> bool:
@@ -742,8 +790,7 @@ class User(Base, UserMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(200), unique=True, nullable=False, index=True)
-    # Backward compatible: support both 'password' and 'password_hash' columns
-    password_hash = Column(String(255), name='password', nullable=False)
+    password_hash = Column(String(255), nullable=False)
     name = Column(String(200), nullable=False)
     role = Column(String(50), default="employee")  # employee, admin, super_admin
     is_active = Column(Boolean, default=True)
