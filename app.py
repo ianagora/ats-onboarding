@@ -561,21 +561,7 @@ class WorkerUser(UserMixin):
         self.email = row.email
         self.name = row.name
 
-@login_manager.user_loader
-def load_user(user_id: str):
-    try:
-        uid = int(user_id)
-    except Exception:
-        return None
-    with Session(engine) as s:
-        row = s.execute(text("SELECT id, name, email FROM users WHERE id=:i"), {"i": uid}).first()
-        if not row:
-            return None
-        # row is a Row tuple (id, name, email)
-        class _Obj: pass
-        obj = _Obj()
-        obj.id, obj.name, obj.email = row[0], row[1], row[2]
-        return WorkerUser(obj)
+# NOTE: user_loader is defined at line 274, this duplicate has been removed
 
 def sign_request(method, path, body=None):
     ts = str(int(time.time()))
@@ -2282,9 +2268,8 @@ def slugify_role(name: str) -> str:
 # -------------- Routes --------------
 from sqlalchemy.orm import selectinload  # make sure this import exists
 
-@login_required
 @app.route("/")
-# @login_required  # TEMPORARILY DISABLED FOR TROUBLESHOOTING
+@login_required
 def index():
     now = datetime.datetime.utcnow()
     d7  = now - datetime.timedelta(days=7)
