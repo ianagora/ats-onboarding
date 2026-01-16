@@ -1695,8 +1695,14 @@ def ensure_schema():
         except Exception as e:
             print(f"Warning: Could not seed admin user: {e}")
 
-# Run on import
-ensure_schema()
+# Run on import - wrapped in try/catch to prevent startup failure
+try:
+    ensure_schema()
+except Exception as e:
+    print(f"⚠️  WARNING: Schema migration failed: {e}")
+    print("⚠️  App will continue but some features may not work correctly")
+    import traceback
+    traceback.print_exc()
 Base.metadata.create_all(engine)
 
 # ---------- Taxonomy tagging helpers ----------
