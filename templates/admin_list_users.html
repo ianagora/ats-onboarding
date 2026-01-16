@@ -40,8 +40,10 @@
                                         <th>Email</th>
                                         <th>Role</th>
                                         <th>Status</th>
+                                        <th>Failed Attempts</th>
                                         <th>Created</th>
                                         <th>Last Login</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -74,6 +76,18 @@
                                                 {{ user.last_login.strftime('%Y-%m-%d %H:%M') }}
                                             {% else %}
                                                 <span class="text-muted">Never</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if user.is_locked() %}
+                                                <form method="POST" action="{{ url_for('admin_unlock_user', user_id=user.id) }}" class="d-inline">
+                                                    <button type="submit" class="btn btn-sm btn-warning" 
+                                                            onclick="return confirm('Unlock {{ user.email }}?')">
+                                                        <i class="bi bi-unlock"></i> Unlock
+                                                    </button>
+                                                </form>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
                                     </tr>

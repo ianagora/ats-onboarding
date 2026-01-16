@@ -193,6 +193,11 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+# Session timeout configuration (30 minutes for regular sessions)
+from datetime import timedelta
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Refresh timeout on each request
+
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
@@ -284,27 +289,65 @@ def load_user(user_id):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Staff login page"""
+    """Staff login page with account lockout protection"""
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
     if request.method == "POST":
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         
         with Session(engine) as s:
             user = s.scalar(select(User).where(User.email == email))
-            if user and check_password_hash(user.password_hash, password):
-                # Successful login
+            
+            if not user:
+                flash("Invalid email or password", "error")
+                return render_template("login.html")
+            
+            # Check if account is locked
+            if user.is_locked():
+                remaining_time = (user.locked_until - datetime.datetime.utcnow()).total_seconds() / 60
+                flash(f"Account locked due to too many failed attempts. Try again in {int(remaining_time)} minutes.", "error")
+                return render_template("login.html")
+            
+            # Check password
+            if check_password_hash(user.password_hash, password):
+                # Successful login - reset failed attempts
+                user.failed_login_attempts = 0
+                user.locked_until = None
+                user.last_login = datetime.datetime.utcnow()
+                s.commit()
+                
                 s.expunge(user)
-                login_user(user, remember=True)
+                
+                # Check for Remember Me checkbox
+                remember = request.form.get('remember_me') == 'on'
+                
+                if remember:
+                    # Remember for 30 days
+                    login_user(user, remember=True, duration=timedelta(days=30))
+                else:
+                    # Regular session with 30-minute timeout
+                    login_user(user, remember=False)
+                    session.permanent = True  # Enable PERMANENT_SESSION_LIFETIME
                 
                 next_page = request.args.get('next')
                 if next_page and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
-                flash("Invalid email or password", "error")
+                # Failed login - increment counter
+                user.failed_login_attempts += 1
+                
+                if user.failed_login_attempts >= 5:
+                    # Lock account for 30 minutes
+                    user.locked_until = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+                    s.commit()
+                    flash("Too many failed login attempts. Account locked for 30 minutes.", "error")
+                else:
+                    remaining = 5 - user.failed_login_attempts
+                    s.commit()
+                    flash(f"Invalid password. {remaining} attempt(s) remaining before lockout.", "error")
     
     return render_template("login.html")
 
@@ -323,12 +366,18 @@ def admin_create_user():
     """Temporary page to manually create admin user"""
     if request.method == "POST":
         name = request.form.get("name", "").strip()
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         role = request.form.get("role", "employee")
         
         if not name or not email or not password:
             flash("All fields are required", "error")
+            return render_template("admin_create_user.html")
+        
+        # Validate password strength
+        is_valid, message, score = validate_password_strength(password, email)
+        if not is_valid:
+            flash(message, "error")
             return render_template("admin_create_user.html")
         
         try:
@@ -373,6 +422,83 @@ def admin_list_users():
     except Exception as e:
         flash(f"Error loading users: {str(e)}", "error")
         return render_template("admin_list_users.html", users=[])
+
+@login_required
+@app.route("/admin/unlock-user/<int:user_id>", methods=["POST"])
+def admin_unlock_user(user_id):
+    """Admin route to unlock a locked user account"""
+    if current_user.role not in ['admin', 'super_admin']:
+        abort(403)
+    
+    with Session(engine) as s:
+        user = s.get(User, user_id)
+        if not user:
+            flash("User not found", "error")
+            return redirect(url_for('admin_list_users'))
+        
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        s.commit()
+        
+        flash(f"User {user.email} unlocked successfully", "success")
+    
+    return redirect(url_for('admin_list_users'))
+
+# ========== Password Security Functions ==========
+
+def validate_password_strength(password: str, email: str = None) -> Tuple[bool, str, int]:
+    """
+    Validate password strength according to security policy.
+    
+    Returns: (is_valid, error_message, strength_score)
+    - is_valid: True if password meets all requirements
+    - error_message: Description of what's missing or "Strong password"
+    - strength_score: 0-5 based on requirements met
+    """
+    errors = []
+    score = 0
+    
+    # Minimum 12 characters
+    if len(password) < 12:
+        errors.append("at least 12 characters")
+    else:
+        score += 1
+    
+    # At least one uppercase letter
+    if not re.search(r'[A-Z]', password):
+        errors.append("an uppercase letter")
+    else:
+        score += 1
+    
+    # At least one lowercase letter
+    if not re.search(r'[a-z]', password):
+        errors.append("a lowercase letter")
+    else:
+        score += 1
+    
+    # At least one number
+    if not re.search(r'\d', password):
+        errors.append("a number")
+    else:
+        score += 1
+    
+    # At least one special character
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        errors.append("a special character (!@#$%^&*() etc.)")
+    else:
+        score += 1
+    
+    # Cannot contain email username
+    if email:
+        username = email.split('@')[0].lower()
+        if username in password.lower():
+            errors.append("cannot contain your email username")
+            score = 0
+    
+    if errors:
+        return False, f"Password must contain {', '.join(errors)}", score
+    
+    return True, "Strong password", score
 
 @login_required
 @app.route("/admin/system-diagnostics")
@@ -420,7 +546,6 @@ def admin_system_diagnostics():
 
 @login_required
 @app.route("/change-password", methods=["GET", "POST"])
-@login_required
 def change_password():
     """Allow users to change their password"""
     if request.method == "POST":
@@ -436,8 +561,10 @@ def change_password():
             flash("New passwords do not match", "error")
             return render_template("change_password.html")
         
-        if len(new_password) < 8:
-            flash("Password must be at least 8 characters", "error")
+        # Validate password strength
+        is_valid, message, score = validate_password_strength(new_password, current_user.email)
+        if not is_valid:
+            flash(message, "error")
             return render_template("change_password.html")
         
         with Session(engine) as s:
