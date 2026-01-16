@@ -378,6 +378,68 @@ def logout():
     flash("You have been logged out", "info")
     return redirect(url_for('login'))
 
+# ========== One-Time Admin Setup ==========
+@app.route("/setup/admin", methods=["GET", "POST"])
+def setup_admin():
+    """
+    One-time admin setup route (no authentication required)
+    Only works if no super_admin users exist in the database
+    """
+    with Session(engine) as s:
+        # Check if any super_admin already exists
+        existing_admin = s.scalar(
+            select(User).where(User.role == 'super_admin')
+        )
+        
+        if existing_admin:
+            flash("Admin user already exists. Please login or contact support.", "error")
+            return redirect(url_for('login'))
+        
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+            
+            if not name or not email or not password or not confirm_password:
+                flash("All fields are required", "error")
+                return render_template("setup_admin.html")
+            
+            if password != confirm_password:
+                flash("Passwords do not match", "error")
+                return render_template("setup_admin.html")
+            
+            # Validate password strength
+            is_valid, message, score = validate_password_strength(password, email)
+            if not is_valid:
+                flash(message, "error")
+                return render_template("setup_admin.html")
+            
+            try:
+                # Create super admin user
+                new_admin = User(
+                    name=name,
+                    email=email,
+                    password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
+                    role='super_admin',
+                    is_active=True,
+                    created_at=datetime.datetime.utcnow()
+                )
+                s.add(new_admin)
+                s.commit()
+                
+                # Log the admin creation
+                log_audit_event('create', 'user_mgmt', f'Initial super admin created: {email}',
+                              'user', new_admin.id, details={'setup_route': True})
+                
+                flash("✅ Super Admin created successfully! You can now login.", "success")
+                return redirect(url_for('login'))
+            except Exception as e:
+                flash(f"Error creating admin: {str(e)}", "error")
+                return render_template("setup_admin.html")
+    
+    return render_template("setup_admin.html")
+
 # ========== TEMPORARY: Admin User Management ==========
 @login_required
 @app.route("/admin/create-user", methods=["GET", "POST"])
