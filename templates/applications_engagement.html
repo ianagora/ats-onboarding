@@ -432,6 +432,11 @@
     <h5 class="stage-title">
       <i class="fas {{ stage_icon }}"></i>
       {{ stage_label }}
+      {% if role_filter %}
+        <span class="badge bg-info ms-2" style="font-size: 0.75rem;">
+          <i class="fas fa-user-tie me-1"></i>Role: {{ role_filter }}
+        </span>
+      {% endif %}
     </h5>
     <div class="stage-count">
       <i class="fas fa-users me-2"></i>{{ rows|length }} candidate{{ 's' if rows|length != 1 else '' }}
@@ -447,6 +452,9 @@
     
     <form method="GET">
       <input type="hidden" name="filter" value="{{ stage }}">
+      {% if role_filter %}
+        <input type="hidden" name="role" value="{{ role_filter }}">
+      {% endif %}
       <div class="row g-3">
         <div class="col-12 col-md-8">
           <label class="field-label">Search Query</label>
@@ -460,7 +468,7 @@
           <button type="submit" class="btn btn-modern btn-modern-primary flex-grow-1">
             <i class="fas fa-search me-2"></i>Search
           </button>
-          <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter=stage) }}" 
+          <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter=stage, role=role_filter if role_filter else None) }}" 
              class="btn btn-modern btn-modern-outline">
             <i class="fas fa-times"></i>
           </a>

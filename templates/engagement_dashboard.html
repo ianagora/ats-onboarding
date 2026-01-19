@@ -233,6 +233,37 @@
     vertical-align: middle;
   }
   
+  /* Clickable metric cells */
+  .metric-cell {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+  }
+  
+  .metric-cell:hover {
+    background: #3b82f6;
+    color: white !important;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  }
+  
+  .metric-cell-zero {
+    color: #d1d5db;
+    cursor: default;
+  }
+  
+  .metric-cell-zero:hover {
+    background: transparent;
+    color: #d1d5db !important;
+    transform: none;
+    box-shadow: none;
+  }
+  
   .mini-progress-bar {
     height: 100%;
     background: linear-gradient(90deg, #059669, #047857);
@@ -606,12 +637,72 @@
               <tr>
                 <td><strong>{{ role }}</strong></td>
                 <td class="text-center">{{ planned }}</td>
-                <td class="text-center">{{ m.get('declared', 0) }}</td>
-                <td class="text-center">{{ m.get('sched', 0) }}</td>
-                <td class="text-center">{{ m.get('done', 0) }}</td>
-                <td class="text-center">{{ m.get('vetting', 0) }}</td>
-                <td class="text-center">{{ m.get('issued', 0) }}</td>
-                <td class="text-center">{{ signed }}</td>
+                <td class="text-center">
+                  {% set declared_count = m.get('declared', 0) %}
+                  {% if declared_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='declared', role=role) }}" 
+                       class="metric-cell" title="View {{ declared_count }} declared application(s) for {{ role }}">
+                      {{ declared_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ declared_count }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set sched_count = m.get('sched', 0) %}
+                  {% if sched_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='interview_sched', role=role) }}" 
+                       class="metric-cell" title="View {{ sched_count }} interview(s) scheduled for {{ role }}">
+                      {{ sched_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ sched_count }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set done_count = m.get('done', 0) %}
+                  {% if done_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='interview_done', role=role) }}" 
+                       class="metric-cell" title="View {{ done_count }} completed interview(s) for {{ role }}">
+                      {{ done_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ done_count }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set vetting_count = m.get('vetting', 0) %}
+                  {% if vetting_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='vetting', role=role) }}" 
+                       class="metric-cell" title="View {{ vetting_count }} candidate(s) in vetting for {{ role }}">
+                      {{ vetting_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ vetting_count }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set issued_count = m.get('issued', 0) %}
+                  {% if issued_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='issued', role=role) }}" 
+                       class="metric-cell" title="View {{ issued_count }} contract(s) issued for {{ role }}">
+                      {{ issued_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ issued_count }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set signed_count = signed %}
+                  {% if signed_count > 0 %}
+                    <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='signed', role=role) }}" 
+                       class="metric-cell" title="View {{ signed_count }} signed contract(s) for {{ role }}">
+                      {{ signed_count }}
+                    </a>
+                  {% else %}
+                    <span class="metric-cell metric-cell-zero">{{ signed_count }}</span>
+                  {% endif %}
+                </td>
                 <td class="text-center">
                   <span class="metric-badge">{{ role_progress }}%</span>
                   <div class="mini-progress">
@@ -623,12 +714,42 @@
             <tr class="totals-row">
               <td><strong>Totals</strong></td>
               <td class="text-center">{{ planned_by_role.values()|sum }}</td>
-              <td class="text-center">{{ totals_row.declared }}</td>
-              <td class="text-center">{{ totals_row.sched }}</td>
-              <td class="text-center">{{ totals_row.done }}</td>
-              <td class="text-center">{{ totals_row.vetting }}</td>
-              <td class="text-center">{{ totals_row.issued }}</td>
-              <td class="text-center">{{ totals_row.signed }}</td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='declared') }}" 
+                   class="metric-cell" title="View all declared applications">
+                  {{ totals_row.declared }}
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='interview_sched') }}" 
+                   class="metric-cell" title="View all scheduled interviews">
+                  {{ totals_row.sched }}
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='interview_done') }}" 
+                   class="metric-cell" title="View all completed interviews">
+                  {{ totals_row.done }}
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='vetting') }}" 
+                   class="metric-cell" title="View all candidates in vetting">
+                  {{ totals_row.vetting }}
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='issued') }}" 
+                   class="metric-cell" title="View all issued contracts">
+                  {{ totals_row.issued }}
+                </a>
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('applications_for_engagement', eng_id=engagement.id, filter='signed') }}" 
+                   class="metric-cell" title="View all signed contracts">
+                  {{ totals_row.signed }}
+                </a>
+              </td>
               <td class="text-center">
                 <span class="metric-badge">{{ progress_pct }}%</span>
                 <div class="mini-progress">

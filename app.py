@@ -6092,6 +6092,7 @@ from sqlalchemy import or_, false
 @app.route("/engagement/<int:eng_id>/applications")
 def applications_for_engagement(eng_id: int):
     q = (request.args.get("q") or "").strip()
+    role_filter = (request.args.get("role") or "").strip()  # NEW: Role filter
 
     raw_stage = (request.args.get("filter") or "declared").strip().lower()
     # Accept both "shortlist" and "shortlisted" (plus a few friendly aliases)
@@ -6128,6 +6129,10 @@ def applications_for_engagement(eng_id: int):
                 Job.title.ilike(like),
                 skills_clause,
             ))
+        
+        # Filter by role if specified
+        if role_filter:
+            apps_q = apps_q.filter(Job.role_type == role_filter)
 
         app_rows = apps_q.all()
 
@@ -6212,6 +6217,7 @@ def applications_for_engagement(eng_id: int):
         engagement=engagement,
         rows=rows,
         stage=stage_filter,
+        role_filter=role_filter,
         q=q,
         engagement_finished=False,
     )
