@@ -1101,33 +1101,49 @@ def setup_2fa():
                 user.totp_secret = user.generate_totp_secret()
                 s.commit()
                 
-                # Generate QR code
-                import pyotp
-                import qrcode
-                import io
-                import base64
-                
-                totp = pyotp.TOTP(user.totp_secret)
-                provisioning_uri = totp.provisioning_uri(
-                    name=user.email,
-                    issuer_name="ATS Onboarding System"
-                )
-                
-                # Generate QR code image
-                qr = qrcode.QRCode(version=1, box_size=10, border=5)
-                qr.add_data(provisioning_uri)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                
-                # Convert to base64
-                buffer = io.BytesIO()
-                img.save(buffer, format='PNG')
-                qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
-                
-                return render_template("setup_2fa.html", 
-                                     qr_code=qr_code_base64,
-                                     secret=user.totp_secret,
-                                     step="verify")
+                try:
+                    # Generate QR code
+                    import pyotp
+                    import qrcode
+                    import io
+                    import base64
+                    from PIL import Image
+                    
+                    totp = pyotp.TOTP(user.totp_secret)
+                    provisioning_uri = totp.provisioning_uri(
+                        name=user.email,
+                        issuer_name="ATS Onboarding System"
+                    )
+                    
+                    # Generate QR code image
+                    qr = qrcode.QRCode(
+                        version=1,
+                        error_correction=qrcode.constants.ERROR_CORRECT_L,
+                        box_size=10,
+                        border=4,
+                    )
+                    qr.add_data(provisioning_uri)
+                    qr.make(fit=True)
+                    
+                    img = qr.make_image(fill_color="black", back_color="white")
+                    
+                    # Convert to base64
+                    buffer = io.BytesIO()
+                    img.save(buffer, format='PNG')
+                    buffer.seek(0)
+                    qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
+                    
+                    return render_template("setup_2fa.html", 
+                                         qr_code=qr_code_base64,
+                                         secret=user.totp_secret,
+                                         step="verify")
+                except Exception as e:
+                    current_app.logger.error(f"QR code generation failed: {str(e)}")
+                    # Even if QR fails, user can still use manual entry
+                    return render_template("setup_2fa.html", 
+                                         qr_code=None,
+                                         secret=user.totp_secret,
+                                         step="verify")
         
         elif action == "verify":
             token = request.form.get("token", "").strip()
