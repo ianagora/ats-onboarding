@@ -6263,6 +6263,7 @@ def resource_pool():
     job_id = request.args.get("job_id")
     last_updated = request.args.get("last_updated") or ""  # "", "7","30","90","365"
     location_filter = request.args.get("location", "all")  # NEW: Location filter
+    engagement_status = request.args.get("engagement_status", "all")  # NEW: Engagement status filter ("all", "on", "off")
     rank = request.args.get("rank") == "1"  # run heavy work for top N rows on page
     exclude_shortlisted = request.args.get("exclude_shortlisted", "0") == "1"
     page = max(1, int((request.args.get("page") or "1") or 1))
@@ -6342,6 +6343,23 @@ def resource_pool():
         if job and exclude_shortlisted:
             sl_ids_subq = select(Shortlist.candidate_id).where(Shortlist.job_id == job.id)
             base = base.where(Candidate.id.notin_(sl_ids_subq))
+        
+        # Filter by engagement status (before pagination to get accurate counts)
+        # We'll need to get on_engagement_ids first, then filter
+        if engagement_status in ["on", "off"]:
+            # Get candidates on active engagements
+            on_engagement_candidate_ids = s.execute(
+                select(Application.candidate_id).distinct()
+                .join(ESigRequest, ESigRequest.application_id == Application.id)
+                .where(ESigRequest.status.in_(['signed', 'completed']))
+            ).scalars().all()
+            
+            if engagement_status == "on":
+                # Only show candidates ON engagement
+                base = base.where(Candidate.id.in_(on_engagement_candidate_ids))
+            elif engagement_status == "off":
+                # Only show candidates NOT on engagement (available)
+                base = base.where(Candidate.id.notin_(on_engagement_candidate_ids))
 
         # Count for pagination
         total_rows = s.execute(
@@ -6443,6 +6461,7 @@ def resource_pool():
         has_cv=has_cv,
         last_updated=last_updated,
         location_filter=location_filter,
+        engagement_status=engagement_status,
         all_locations=all_locations,
         rows=rows,
         jobs=jobs,
@@ -6462,6 +6481,7 @@ def resource_pool_csv():
     has_cv = request.args.get("has_cv", "0") == "1"
     job_id = request.args.get("job_id")
     last_updated = request.args.get("last_updated") or ""
+    engagement_status = request.args.get("engagement_status", "all")  # NEW: Engagement status filter
 
     job = None
     job_id_int = None
@@ -6503,6 +6523,19 @@ def resource_pool_csv():
             days = int(last_updated)
             cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
             stmt = stmt.where((sub_last.c.last_uploaded != None) & (sub_last.c.last_uploaded >= cutoff))
+        
+        # Filter by engagement status for CSV export
+        if engagement_status in ["on", "off"]:
+            on_engagement_candidate_ids = s.execute(
+                select(Application.candidate_id).distinct()
+                .join(ESigRequest, ESigRequest.application_id == Application.id)
+                .where(ESigRequest.status.in_(['signed', 'completed']))
+            ).scalars().all()
+            
+            if engagement_status == "on":
+                stmt = stmt.where(Candidate.id.in_(on_engagement_candidate_ids))
+            elif engagement_status == "off":
+                stmt = stmt.where(Candidate.id.notin_(on_engagement_candidate_ids))
 
         stmt = stmt.order_by(func.coalesce(sub_last.c.last_uploaded, Candidate.created_at).desc())
         rows_db = s.execute(stmt).all()

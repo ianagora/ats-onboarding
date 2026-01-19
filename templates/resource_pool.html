@@ -415,6 +415,17 @@
             </select>
           </div>
 
+          <!-- Engagement Status Filter -->
+          <div class="col-6 col-md-3">
+            <label class="field-label">Engagement Status</label>
+            <select name="engagement_status" class="field-input form-select">
+              {% set eng_status = request.args.get('engagement_status', 'all') %}
+              <option value="all" {{ 'selected' if eng_status=='all' else '' }}>All</option>
+              <option value="on" {{ 'selected' if eng_status=='on' else '' }}>On Engagement</option>
+              <option value="off" {{ 'selected' if eng_status=='off' else '' }}>Available</option>
+            </select>
+          </div>
+
           <!-- Exclude Shortlisted -->
           <div class="col-6 col-md-3">
             <label class="field-label">Exclude Shortlisted</label>
@@ -464,6 +475,7 @@
                               job_id=(job.id if job else None),
                               last_updated=last_updated,
                               location=location_filter,
+                              engagement_status=request.args.get('engagement_status','all'),
                               exclude_shortlisted=request.args.get('exclude_shortlisted','0')) }}">
             <i class="fas fa-filter"></i> Export Filtered
           </a>
@@ -518,6 +530,10 @@
                   {% if r.on_engagement %}
                     <span class="badge bg-success ms-2" style="font-size: 0.7rem;">
                       <i class="fas fa-briefcase"></i> On Engagement
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">
+                      <i class="fas fa-user-clock"></i> Available
                     </span>
                   {% endif %}
                 </td>
@@ -605,6 +621,8 @@
                  q=q, has_cv=('1' if has_cv else '0'), job_id=(job.id if job else None),
                  last_updated=last_updated, page=(pagination.page - 1),
                  per_page=pagination.per_page, rank=('1' if rank else '0'),
+                 location=location_filter,
+                 engagement_status=request.args.get('engagement_status','all'),
                  exclude_shortlisted=request.args.get('exclude_shortlisted','0')) }}">
                 <i class="fas fa-chevron-left"></i> Previous
               </a>
@@ -615,6 +633,8 @@
                    q=q, has_cv=('1' if has_cv else '0'), job_id=(job.id if job else None),
                    last_updated=last_updated, page=p, per_page=pagination.per_page,
                    rank=('1' if rank else '0'),
+                   location=location_filter,
+                   engagement_status=request.args.get('engagement_status','all'),
                    exclude_shortlisted=request.args.get('exclude_shortlisted','0')) }}">{{ p }}</a>
               </li>
             {% endfor %}
@@ -623,6 +643,8 @@
                  q=q, has_cv=('1' if has_cv else '0'), job_id=(job.id if job else None),
                  last_updated=last_updated, page=(pagination.page + 1),
                  per_page=pagination.per_page, rank=('1' if rank else '0'),
+                 location=location_filter,
+                 engagement_status=request.args.get('engagement_status','all'),
                  exclude_shortlisted=request.args.get('exclude_shortlisted','0')) }}">
                 Next <i class="fas fa-chevron-right"></i>
               </a>
