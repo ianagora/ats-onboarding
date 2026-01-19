@@ -519,6 +519,7 @@
             AI Match Score
           </div>
           <form method="POST" action="{{ url_for('recalculate_match_score') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="candidate_id" value="{{ cand.id }}">
             <button class="btn-modern btn-modern-outline w-100">
               <i class="fas fa-sync-alt"></i> Recalculate Score

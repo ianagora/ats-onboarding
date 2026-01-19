@@ -44,6 +44,12 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import session
 from openai import OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# reCAPTCHA configuration
+RECAPTCHA_SITE_KEY = os.getenv("RECAPTCHA_SITE_KEY", "")
+RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "")
+RECAPTCHA_ENABLED = bool(RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY)
+
 import datetime
 from flask import abort, render_template, request
 from sqlalchemy import or_, false
@@ -825,6 +831,122 @@ def validate_password_strength(password: str, email: str = None) -> Tuple[bool, 
     
     return True, "Strong password", score
 
+# ========== Security Enhancement Functions ==========
+
+def verify_recaptcha(token: str) -> bool:
+    """
+    Verify Google reCAPTCHA v3 token.
+    Returns True if valid, False otherwise.
+    """
+    if not RECAPTCHA_ENABLED:
+        return True  # Skip verification if not configured
+    
+    try:
+        response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': RECAPTCHA_SECRET_KEY,
+                'response': token
+            },
+            timeout=5
+        )
+        result = response.json()
+        
+        # reCAPTCHA v3 returns a score from 0.0 to 1.0
+        # 1.0 is very likely a good interaction, 0.0 is very likely a bot
+        # We'll accept scores >= 0.5
+        return result.get('success', False) and result.get('score', 0) >= 0.5
+    except Exception as e:
+        current_app.logger.error(f"reCAPTCHA verification failed: {str(e)}")
+        return True  # Fail open to avoid blocking legitimate users if reCAPTCHA is down
+
+def sanitize_input(text: str, allow_html: bool = False) -> str:
+    """
+    Sanitize user input to prevent XSS attacks.
+    
+    Args:
+        text: Input text to sanitize
+        allow_html: If True, allows safe HTML tags (for rich text)
+    
+    Returns:
+        Sanitized text safe for display
+    """
+    if not text:
+        return text
+    
+    import bleach
+    
+    if allow_html:
+        # Allow safe HTML tags for rich text content
+        allowed_tags = [
+            'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'a', 'blockquote', 'code', 'pre'
+        ]
+        allowed_attrs = {
+            'a': ['href', 'title'],
+            'img': ['src', 'alt', 'title']
+        }
+        return bleach.clean(text, tags=allowed_tags, attributes=allowed_attrs, strip=True)
+    else:
+        # Strip all HTML for plain text fields
+        return bleach.clean(text, tags=[], strip=True)
+
+def check_password_history(user_id: int, new_password: str, history_limit: int = 5) -> bool:
+    """
+    Check if password has been used recently.
+    
+    Args:
+        user_id: User ID to check
+        new_password: New password to check against history
+        history_limit: Number of previous passwords to check (default 5)
+    
+    Returns:
+        True if password is OK to use, False if it's been used recently
+    """
+    try:
+        with Session(engine) as s:
+            # Get last N password hashes for this user
+            recent_passwords = s.execute(
+                text("""
+                    SELECT password_hash FROM password_history
+                    WHERE user_id = :user_id
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """),
+                {"user_id": user_id, "limit": history_limit}
+            ).fetchall()
+            
+            # Check if new password matches any recent passwords
+            for (old_hash,) in recent_passwords:
+                if check_password_hash(old_hash, new_password):
+                    return False  # Password has been used recently
+            
+            return True  # Password is OK to use
+    except Exception as e:
+        current_app.logger.error(f"Password history check failed: {str(e)}")
+        return True  # Fail open if check fails
+
+def save_password_to_history(user_id: int, password_hash: str):
+    """
+    Save password hash to history for reuse prevention.
+    
+    Args:
+        user_id: User ID
+        password_hash: Hashed password to save
+    """
+    try:
+        with Session(engine) as s:
+            s.execute(
+                text("""
+                    INSERT INTO password_history (user_id, password_hash, created_at)
+                    VALUES (:user_id, :password_hash, CURRENT_TIMESTAMP)
+                """),
+                {"user_id": user_id, "password_hash": password_hash}
+            )
+            s.commit()
+    except Exception as e:
+        current_app.logger.error(f"Failed to save password history: {str(e)}")
+
 # ========== Audit Logging Functions ==========
 
 def log_audit_event(event_type: str, event_category: str, action: str, 
@@ -942,6 +1064,14 @@ def change_password():
             if not user or not check_password_hash(user.password_hash, current_password):
                 flash("Current password is incorrect", "error")
                 return render_template("change_password.html")
+            
+            # Check password history (prevent reuse of last 5 passwords)
+            if not check_password_history(current_user.id, new_password, history_limit=5):
+                flash("You cannot reuse any of your last 5 passwords. Please choose a different password.", "error")
+                return render_template("change_password.html")
+            
+            # Save old password to history before changing
+            save_password_to_history(current_user.id, user.password_hash)
             
             # Update password
             user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')

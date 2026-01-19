@@ -22,3 +22,6 @@ openai==1.12.0
 # 2FA/TOTP support
 pyotp==2.9.0
 qrcode[pil]==7.4.2
+
+# Security enhancements
+bleach==6.1.0

@@ -676,6 +676,7 @@
         
         {% if appn %}
           <form method="POST" action="{{ url_for('action_score', app_id=appn.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button class="btn btn-modern btn-modern-outline btn-modern-sm">
               <i class="fas fa-calculator me-2"></i>Recalculate
             </button>
