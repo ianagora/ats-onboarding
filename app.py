@@ -371,7 +371,13 @@ def run_migration():
                 "is_active": "BOOLEAN DEFAULT TRUE",
                 "last_login": "TIMESTAMP",
                 "failed_login_attempts": "INTEGER DEFAULT 0",
-                "locked_until": "TIMESTAMP"
+                "locked_until": "TIMESTAMP",
+                "totp_secret": "VARCHAR(32)",
+                "totp_enabled": "BOOLEAN DEFAULT FALSE",
+                "backup_codes": "TEXT",
+                "session_token": "VARCHAR(255)",
+                "last_ip": "VARCHAR(45)",
+                "last_user_agent": "TEXT"
             }
             
             for col_name, col_def in security_columns.items():
@@ -406,12 +412,30 @@ def run_migration():
             except Exception as e:
                 results.append(f"⚠️  audit_logs: {str(e)}")
             
+            # Create password_history table
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS password_history (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        password_hash VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )
+                """))
+                results.append("✅ Created password_history table")
+            except Exception as e:
+                results.append(f"⚠️  password_history: {str(e)}")
+            
             # Create indexes
             indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)",
                 "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_password_history_user_id ON password_history(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_password_history_created_at ON password_history(created_at)",
                 "CREATE INDEX IF NOT EXISTS idx_users_email_idx ON users(email)",
-                "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)"
+                "CREATE INDEX IF NOT EXISTS idx_users_role_idx ON users(role)",
+                "CREATE INDEX IF NOT EXISTS idx_users_totp_enabled ON users(totp_enabled)"
             ]
             
             for idx_stmt in indexes:
